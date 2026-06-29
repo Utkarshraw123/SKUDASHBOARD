@@ -19,64 +19,57 @@ export default async function RiskPage() {
   };
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Cover Risk</h1>
-        <p className="text-gray-500 text-sm mt-1">SKUs below 16 weeks of cover — sorted by urgency</p>
+    <div className="max-w-6xl">
+      <div className="mb-10">
+        <h1 className="font-serif text-3xl font-medium text-charcoal tracking-wide">Cover Risk</h1>
+        <p className="text-text-muted text-sm mt-2 tracking-wide">SKUs below 16 weeks — sorted by urgency</p>
       </div>
 
-      <div className="flex gap-4 mb-6">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="inline-block w-3 h-3 rounded-full bg-red-400" />
-          <span className="text-gray-600">{counts.critical} Critical (&lt;4w)</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="inline-block w-3 h-3 rounded-full bg-amber-400" />
-          <span className="text-gray-600">{counts.low} Low (4–8w)</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="inline-block w-3 h-3 rounded-full bg-yellow-300" />
-          <span className="text-gray-600">{counts.ok} Watch (8–16w)</span>
-        </div>
+      <div className="flex gap-6 mb-8">
+        {[
+          { label: "Critical", count: counts.critical, color: "bg-red-400" },
+          { label: "Low (4–8w)", count: counts.low, color: "bg-amber-400" },
+          { label: "Watch (8–16w)", count: counts.ok, color: "bg-yellow-300" },
+        ].map(({ label, count, color }) => (
+          <div key={label} className="flex items-center gap-2 text-sm text-charcoal">
+            <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} />
+            <span>{count} {label}</span>
+          </div>
+        ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-[#e4ddd4] overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr className="text-left text-gray-500">
-              <th className="px-4 py-3 font-medium">SKU Code</th>
-              <th className="px-4 py-3 font-medium">Product</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Cover</th>
-              <th className="px-4 py-3 font-medium text-right">Inventory</th>
-              <th className="px-4 py-3 font-medium text-right">Monthly Demand</th>
-              <th className="px-4 py-3 font-medium">Next Delivery</th>
+          <thead className="bg-cream border-b border-[#e4ddd4]">
+            <tr className="text-left">
+              <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium">SKU Code</th>
+              <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium">Product</th>
+              <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium">Type</th>
+              <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium">Cover</th>
+              <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right">Inventory</th>
+              <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right">Monthly Demand</th>
+              <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium">Next Delivery</th>
             </tr>
           </thead>
           <tbody>
             {atRisk.map((s) => {
               const status = getCoverStatus(s.cover);
-              const rowBg =
-                status === "critical"
-                  ? "bg-red-50/40"
-                  : status === "low"
-                  ? "bg-amber-50/40"
-                  : "";
+              const rowBg = status === "critical" ? "bg-red-50/30" : status === "low" ? "bg-amber-50/30" : "";
               return (
-                <tr key={s.skuCode} className={`border-b border-gray-100 hover:bg-gray-50 ${rowBg}`}>
-                  <td className="px-4 py-2.5">
-                    <Link href={`/sku/${s.skuCode}`} className="font-mono text-xs text-brand-green hover:underline">
+                <tr key={s.skuCode} className={`border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors ${rowBg}`}>
+                  <td className="px-5 py-3">
+                    <Link href={`/sku/${s.skuCode}`} className="font-mono text-xs text-copper hover:opacity-70">
                       {s.skuCode}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 text-gray-900 max-w-xs truncate">{s.description}</td>
-                  <td className="px-4 py-2.5">
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{s.type || "—"}</span>
+                  <td className="px-5 py-3 text-charcoal max-w-xs truncate">{s.description}</td>
+                  <td className="px-5 py-3">
+                    <span className="rounded-full bg-cream-dark px-2.5 py-0.5 text-xs text-text-muted">{s.type || "—"}</span>
                   </td>
-                  <td className="px-4 py-2.5"><CoverBadge cover={s.cover} /></td>
-                  <td className="px-4 py-2.5 text-right text-gray-700">{s.inventory?.toLocaleString() ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right font-medium">{s.monthlyDemandAvg?.toLocaleString() ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-gray-500 text-xs">
+                  <td className="px-5 py-3"><CoverBadge cover={s.cover} /></td>
+                  <td className="px-5 py-3 text-right text-charcoal">{s.inventory?.toLocaleString() ?? "—"}</td>
+                  <td className="px-5 py-3 text-right font-medium text-charcoal">{s.monthlyDemandAvg?.toLocaleString() ?? "—"}</td>
+                  <td className="px-5 py-3 text-text-muted text-xs">
                     {s.nextBulkDelivery && s.nextBulkDelivery !== "Not Planned"
                       ? `Bulk: ${s.nextBulkDelivery}`
                       : s.nextPackingDelivery && s.nextPackingDelivery !== "Not Planned"

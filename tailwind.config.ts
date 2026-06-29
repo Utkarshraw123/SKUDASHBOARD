@@ -9,11 +9,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          green: "#2D6A4F",
-          light: "#52B788",
-          bg: "#F8FAF7",
-        },
+        charcoal: "#393836",
+        copper: "#c9612e",
+        "copper-light": "#d9784a",
+        cream: "#f7f3ee",
+        "cream-dark": "#ede6db",
+        "text-muted": "#8a8480",
+        border: "#e4ddd4",
+      },
+      fontFamily: {
+        sans: ["Nunito Sans", "Proxima Nova", "-apple-system", "sans-serif"],
+        serif: ["Playfair Display", "Optima", "Georgia", "serif"],
       },
     },
   },

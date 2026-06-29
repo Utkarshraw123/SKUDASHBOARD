@@ -15,7 +15,6 @@ export default async function OverviewPage() {
   const low = skus.filter((s) => getCoverStatus(s.cover) === "low");
   const totalInventory = skus.reduce((sum, s) => sum + (s.inventory ?? 0), 0);
 
-  // Inventory by type chart data
   const byType: Record<string, number> = {};
   for (const s of skus) {
     const t = s.type || "Other";
@@ -32,73 +31,55 @@ export default async function OverviewPage() {
     .slice(0, 5);
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
-        <p className="text-gray-500 text-sm mt-1">Live data from Google Sheets · ALL SKU DASHBOARD</p>
+    <div className="max-w-6xl">
+      <div className="mb-10">
+        <h1 className="font-serif text-3xl font-medium text-charcoal tracking-wide">Overview</h1>
+        <p className="text-text-muted text-sm mt-2 tracking-wide">Live inventory data · ALL SKU DASHBOARD</p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KpiCard title="Total SKUs" value={totalSKUs} color="blue" />
-        <KpiCard
-          title="Critical (<4 weeks)"
-          value={critical.length}
-          subtitle="Immediate attention required"
-          color="red"
-        />
-        <KpiCard
-          title="Low Cover (4–8 weeks)"
-          value={low.length}
-          subtitle="Action needed soon"
-          color="amber"
-        />
-        <KpiCard
-          title="Total Inventory"
-          value={totalInventory.toLocaleString()}
-          subtitle="Units across all locations"
-          color="green"
-        />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <KpiCard title="Total SKUs" value={totalSKUs} color="default" />
+        <KpiCard title="Critical" value={critical.length} subtitle="Under 4 weeks cover" color="red" />
+        <KpiCard title="Low Cover" value={low.length} subtitle="4–8 weeks cover" color="amber" />
+        <KpiCard title="Total Inventory" value={totalInventory.toLocaleString()} subtitle="Units across all locations" color="copper" />
       </div>
 
-      {/* Chart */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-        <h2 className="text-base font-semibold text-gray-800 mb-4">Inventory by Product Type</h2>
+      <div className="bg-white rounded-2xl border border-[#e4ddd4] p-7 mb-8">
+        <h2 className="font-serif text-lg text-charcoal mb-5">Inventory by Product Type</h2>
         <InventoryChart data={chartData} />
       </div>
 
-      {/* Top critical SKUs */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-800">Top Critical SKUs by Demand</h2>
-          <Link href="/risk" className="text-sm text-brand-green font-medium hover:underline">
+      <div className="bg-white rounded-2xl border border-[#e4ddd4] p-7">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-serif text-lg text-charcoal">Top Critical SKUs by Demand</h2>
+          <Link href="/risk" className="text-xs text-copper tracking-widest uppercase hover:opacity-70 transition-opacity">
             View all →
           </Link>
         </div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500 border-b border-gray-100">
-              <th className="pb-2 font-medium">SKU</th>
-              <th className="pb-2 font-medium">Product</th>
-              <th className="pb-2 font-medium">Type</th>
-              <th className="pb-2 font-medium">Cover</th>
-              <th className="pb-2 font-medium text-right">Monthly Demand</th>
+            <tr className="text-left border-b border-[#e4ddd4]">
+              <th className="pb-3 text-xs tracking-widest uppercase text-text-muted font-medium">SKU</th>
+              <th className="pb-3 text-xs tracking-widest uppercase text-text-muted font-medium">Product</th>
+              <th className="pb-3 text-xs tracking-widest uppercase text-text-muted font-medium">Type</th>
+              <th className="pb-3 text-xs tracking-widest uppercase text-text-muted font-medium">Cover</th>
+              <th className="pb-3 text-xs tracking-widest uppercase text-text-muted font-medium text-right">Monthly Demand</th>
             </tr>
           </thead>
           <tbody>
             {top5Critical.map((s) => (
-              <tr key={s.skuCode} className="border-b border-gray-50 hover:bg-gray-50">
-                <td className="py-2.5">
-                  <Link href={`/sku/${s.skuCode}`} className="font-mono text-xs text-brand-green hover:underline">
+              <tr key={s.skuCode} className="border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors">
+                <td className="py-3">
+                  <Link href={`/sku/${s.skuCode}`} className="font-mono text-xs text-copper hover:opacity-70">
                     {s.skuCode}
                   </Link>
                 </td>
-                <td className="py-2.5 text-gray-900">{s.description}</td>
-                <td className="py-2.5">
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{s.type}</span>
+                <td className="py-3 text-charcoal">{s.description}</td>
+                <td className="py-3">
+                  <span className="rounded-full bg-cream-dark px-2.5 py-0.5 text-xs text-text-muted">{s.type}</span>
                 </td>
-                <td className="py-2.5"><CoverBadge cover={s.cover} /></td>
-                <td className="py-2.5 text-right font-medium">{s.monthlyDemandAvg?.toLocaleString() ?? "—"}</td>
+                <td className="py-3"><CoverBadge cover={s.cover} /></td>
+                <td className="py-3 text-right font-medium text-charcoal">{s.monthlyDemandAvg?.toLocaleString() ?? "—"}</td>
               </tr>
             ))}
           </tbody>

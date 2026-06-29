@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #F8FAF7;
+@import url('https://fonts.googleapis.com/css2?family=Proxima+Nova:wght@300;400;500;600&display=swap');
+
+/* Proxima Nova via Google Fonts approximation — Nunito Sans is the closest freely available */
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap');
+
+:root {
+  --charcoal: #393836;
+  --copper: #c9612e;
+  --copper-light: #d9784a;
+  --cream: #f7f3ee;
+  --cream-dark: #ede6db;
+  --white: #ffffff;
+  --text-muted: #8a8480;
+  --border: #e4ddd4;
+}
+
+html, body {
+  background-color: var(--cream);
+  color: var(--charcoal);
+  font-family: 'Nunito Sans', 'Proxima Nova', -apple-system, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Playfair Display', 'Optima', Georgia, serif;
+  color: var(--charcoal);
 }
