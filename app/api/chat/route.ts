@@ -107,13 +107,13 @@ ${context}`;
   const recentMessages = messages.slice(-6);
 
   const body = {
-    model: "llama-3.1-8b-instant",
+    model: "llama-3.3-70b-versatile",
     messages: [
       { role: "system", content: systemPrompt },
       ...recentMessages.map((m) => ({ role: m.role, content: m.content })),
     ],
     temperature: 0.2,
-    max_tokens: 1024,
+    max_tokens: 600,
     stream: true,
   };
 
