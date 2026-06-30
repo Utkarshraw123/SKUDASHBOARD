@@ -79,7 +79,7 @@ export default async function InventoryPage({
                 <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right">Total</th>
                 <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right">WNP</th>
                 <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right">External</th>
-                <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right">Fill %</th>
+                <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right">Fill</th>
                 <th className="px-5 py-4 text-xs tracking-widest uppercase text-text-muted font-medium">Cover</th>
               </tr>
             </thead>
@@ -98,7 +98,7 @@ export default async function InventoryPage({
                   <td className="px-5 py-3 text-right font-semibold text-charcoal">{s.inventory?.toLocaleString()}</td>
                   <td className="px-5 py-3 text-right text-text-muted">{s.wnpStock?.toLocaleString() ?? "—"}</td>
                   <td className="px-5 py-3 text-right text-text-muted">{s.externalStock?.toLocaleString() ?? "—"}</td>
-                  <td className="px-5 py-3 text-right text-text-muted">{s.fill !== null ? `${s.fill}%` : "—"}</td>
+                  <td className="px-5 py-3 text-right text-text-muted">{s.fill ?? "—"}</td>
                   <td className="px-5 py-3"><CoverBadge cover={s.cover} /></td>
                 </tr>
               ))}

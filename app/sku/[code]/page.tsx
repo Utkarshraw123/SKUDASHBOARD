@@ -1,4 +1,5 @@
 import { fetchSkus } from "@/lib/sheets";
+import { futureDateOnly, futureDateFull } from "@/lib/markets";
 import CoverBadge from "@/components/CoverBadge";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -50,7 +51,7 @@ export default async function SkuDetailPage({ params }: { params: { code: string
           <Row label="Total Inventory" value={sku.inventory} />
           <Row label="WNP Stock" value={sku.wnpStock} />
           <Row label="External Stock (EXG)" value={sku.externalStock} />
-          <Row label="Fill %" value={sku.fill !== null ? `${sku.fill}%` : null} />
+          <Row label="Fill" value={sku.fill} />
           <Row label="Cover at WNP" value={sku.coverAtWNP !== null ? `${sku.coverAtWNP} weeks` : null} />
           <Row label="Projected Cover" value={sku.projectedCover !== null ? `${sku.projectedCover} weeks` : null} />
         </Section>
@@ -76,15 +77,15 @@ export default async function SkuDetailPage({ params }: { params: { code: string
 
         <Section title="Planned Deliveries">
           <p className="text-xs text-text-muted tracking-widest uppercase mb-2">Bulk</p>
-          <Row label="Next Bulk Delivery" value={sku.nextBulkDelivery} />
+          <Row label="Next Bulk Delivery" value={futureDateOnly(sku.nextBulkDelivery)} />
           <Row label="Bulk Quantity" value={sku.bulkDeliveryQty} />
-          <Row label="Bulk ETA" value={sku.bulkETA} />
+          <Row label="Bulk ETA" value={futureDateFull(sku.bulkETA)} />
           <Row label="Packer / Vendor" value={sku.packerVendor} />
           <Row label="Total Planned (Ts)" value={sku.totalPlannedTs} />
           <p className="text-xs text-text-muted tracking-widest uppercase mt-4 mb-2">Packing</p>
-          <Row label="Next Packing Delivery" value={sku.nextPackingDelivery} />
+          <Row label="Next Packing Delivery" value={futureDateOnly(sku.nextPackingDelivery)} />
           <Row label="Packing Quantity" value={sku.packingDeliveryQty} />
-          <Row label="Packing ETA" value={sku.packingETA} />
+          <Row label="Packing ETA" value={futureDateFull(sku.packingETA)} />
           <Row label="Packing Vendor" value={sku.packingVendor} />
           <Row label="Total Packing Planned" value={sku.totalPackingPlanned} />
           <p className="text-xs text-text-muted tracking-widest uppercase mt-4 mb-2">Planning Gap</p>

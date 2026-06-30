@@ -35,3 +35,16 @@ export function futureDateOnly(ddmm: string): string | null {
   if (d < now) d = new Date(now.getFullYear() + 1, month, day);
   return d >= now ? ddmm : null;
 }
+
+/** Parse a DD/MM/YYYY date → return the string only if today or in the future, else null */
+export function futureDateFull(ddmmyyyy: string): string | null {
+  if (!ddmmyyyy || ddmmyyyy === "Not Planned" || ddmmyyyy === "#N/A" || ddmmyyyy.trim() === "") return null;
+  const parts = ddmmyyyy.trim().split("/");
+  if (parts.length < 3) return futureDateOnly(ddmmyyyy); // fall back to DD/MM handler
+  const [d, m, y] = parts;
+  const date = new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`);
+  if (isNaN(date.getTime())) return null;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return date >= now ? ddmmyyyy : null;
+}

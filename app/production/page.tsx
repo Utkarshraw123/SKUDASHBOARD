@@ -1,4 +1,5 @@
 import { fetchProduction } from "@/lib/sheets";
+import { futureDateFull } from "@/lib/markets";
 import FilterBar from "@/components/FilterBar";
 import { Suspense } from "react";
 
@@ -135,7 +136,7 @@ export default async function ProductionPage({
                     <div><span className="text-text-muted">PO </span><span className="font-mono text-copper">{r.order || "—"}</span></div>
                     <div><span className="text-text-muted">WO </span><span className="font-mono text-text-muted">{r.workOrder || "—"}</span></div>
                     <div><span className="text-text-muted">Part </span><span className="font-mono text-text-muted">{r.partNumber || "—"}</span></div>
-                    <div><span className="text-text-muted">Due </span><span className="text-charcoal">{r.dueDate || "—"}</span></div>
+                    <div><span className="text-text-muted">Due </span><span className="text-charcoal">{r.status === "complete" ? (r.dueDate || "—") : (futureDateFull(r.dueDate) || "—")}</span></div>
                     <div><span className="text-text-muted">Qty </span><span className="text-charcoal">{r.quantity?.toLocaleString() ?? "—"}</span></div>
                     <div><span className="text-text-muted">Received </span><span className="text-charcoal">{r.received?.toLocaleString() ?? "—"}</span></div>
                     <div><span className="text-text-muted">Cost </span><span className="font-medium text-charcoal">{r.cost || "—"}</span></div>
@@ -192,7 +193,7 @@ export default async function ProductionPage({
                       <td className="px-4 py-3 font-mono text-xs text-text-muted overflow-hidden"><span className="block truncate">{r.partNumber}</span></td>
                       <td className="px-4 py-3 text-charcoal overflow-hidden"><span className="block truncate">{r.description}</span></td>
                       <td className="px-4 py-3 text-text-muted text-xs overflow-hidden"><span className="block truncate">{r.raisedDate || "—"}</span></td>
-                      <td className="px-4 py-3 text-text-muted text-xs overflow-hidden"><span className="block truncate">{r.dueDate || "—"}</span></td>
+                      <td className="px-4 py-3 text-text-muted text-xs overflow-hidden"><span className="block truncate">{r.status === "complete" ? (r.dueDate || "—") : (futureDateFull(r.dueDate) || "—")}</span></td>
                       <td className="px-4 py-3 text-right text-charcoal overflow-hidden"><span className="block truncate">{r.quantity?.toLocaleString() ?? "—"}</span></td>
                       <td className="px-4 py-3 text-right text-text-muted overflow-hidden"><span className="block truncate">{r.received?.toLocaleString() ?? "—"}</span></td>
                       <td className="px-4 py-3 text-right font-medium text-charcoal overflow-hidden"><span className="block truncate">{r.cost || "—"}</span></td>

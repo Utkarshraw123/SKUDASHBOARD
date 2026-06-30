@@ -1,4 +1,5 @@
 import { fetchPackingSchedule, fetchWNPPlanning } from "@/lib/sheets";
+import { futureDateFull } from "@/lib/markets";
 import FilterBar from "@/components/FilterBar";
 import { Suspense } from "react";
 
@@ -170,7 +171,7 @@ export default async function PackingPage({
                     <tr key={`${r.purchaseOrder}-${r.partNumber}-${i}`} className={`border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors ${rowBg}`}>
                       <td className="px-4 py-3 font-mono text-xs text-copper whitespace-nowrap">{r.partNumber}</td>
                       <td className="px-4 py-3 text-charcoal max-w-[240px] truncate">{r.description}</td>
-                      <td className="px-4 py-3 text-text-muted text-xs font-medium whitespace-nowrap">{r.dueDate || "—"}</td>
+                      <td className="px-4 py-3 text-text-muted text-xs font-medium whitespace-nowrap">{futureDateFull(r.dueDate) || "—"}</td>
                       <td className="px-4 py-3 font-mono text-xs text-text-muted whitespace-nowrap">{r.purchaseOrder || "—"}</td>
                       <td className="px-4 py-3 text-right font-semibold text-charcoal whitespace-nowrap">{r.balance?.toLocaleString() ?? "—"}</td>
                       <td className="px-4 py-3 text-xs max-w-[160px] truncate">
