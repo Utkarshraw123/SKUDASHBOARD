@@ -1,14 +1,17 @@
 import { fetchSkus } from "@/lib/sheets";
 import { getCoverStatus } from "@/lib/types";
+import { getMarketMode, filterSkusByMode } from "@/lib/markets";
 import KpiCard from "@/components/KpiCard";
 import CoverBadge from "@/components/CoverBadge";
 import InventoryChart from "@/components/InventoryChart";
 import Link from "next/link";
 
-export const revalidate = 300;
+export const revalidate = 0;
 
 export default async function OverviewPage() {
-  const skus = await fetchSkus();
+  const allSkus = await fetchSkus();
+  const mode = getMarketMode();
+  const skus = filterSkusByMode(allSkus, mode);
 
   const totalSKUs = skus.length;
   const critical = skus.filter((s) => getCoverStatus(s.cover) === "critical");
@@ -30,11 +33,16 @@ export default async function OverviewPage() {
     .sort((a, b) => (b.monthlyDemandAvg ?? 0) - (a.monthlyDemandAvg ?? 0))
     .slice(0, 5);
 
+  const modeLabel: Record<string, string> = { all: "All SKUs", dtc: "DTC & Retail", eu: "EU Goods", us: "US Goods", accessories: "Accessories" };
+  const marketNames = modeLabel[mode] ?? mode;
+
   return (
     <div className="max-w-6xl">
       <div className="mb-10">
         <h1 className="font-serif text-3xl font-medium text-charcoal tracking-wide">Overview</h1>
-        <p className="text-text-muted text-sm mt-2 tracking-wide">Live inventory data · ALL SKU DASHBOARD</p>
+        <p className="text-text-muted text-sm mt-2 tracking-wide">
+          Showing: {marketNames}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">

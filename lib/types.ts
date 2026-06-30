@@ -43,6 +43,71 @@ export interface SkuRow {
   demand16WeekCover: number | null;
 }
 
+export interface ProductionRow {
+  vendor: string;
+  vendorName: string;
+  orderType: string;
+  order: string;
+  raisedDate: string;
+  productionDate: string;
+  dueDate: string;
+  partNumber: string;
+  description: string;
+  quantity: number | null;
+  received: number | null;
+  unit: string;
+  cost: string;
+  costPerUnit: number | null;
+  workOrder: string;
+  poStatus: string;
+  kitStatus: string;
+  completionDate: string;
+  status: "complete" | "partial" | "open";
+}
+
+export interface PlanningRow {
+  plannedWeek: string;
+  plannedDays: string;
+  bulkCode: string;
+  productCode: string;
+  description: string;
+  fill: number | null;
+  quantity: number | null;
+  workOrderNo: string;
+  quantityProduced: number | null;
+  bulkAtWNP: string;
+  notes: string;
+  currentStock: number | null;
+  batch: string;
+  bbd: string;
+  dateCompleted: string;
+  statusText: string;
+  status: "complete" | "in_progress" | "planned";
+}
+
+export interface BulkPoRow {
+  vendorNumber: string;
+  vendorName: string;
+  order: string;
+  date: string;
+  partNumber: string;
+  description: string;
+  partType: string;
+  dueDate: string;
+  orderQuantity: number | null;
+}
+
+export interface PackingRow {
+  partNumber: string;
+  description: string;
+  dueDate: string;
+  purchaseOrder: string;
+  balance: number | null;
+  vendorNumber: string;
+  vendorName: string;
+  urgency: "overdue" | "this_week" | "upcoming";
+}
+
 export type CoverStatus = "critical" | "low" | "ok" | "good" | "unknown";
 
 export function getCoverStatus(cover: number | null): CoverStatus {

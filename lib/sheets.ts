@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import { cache } from "react";
-import type { SkuRow } from "./types";
+import type { SkuRow, ProductionRow, PlanningRow, BulkPoRow, PackingRow } from "./types";
 
 function cleanNum(s: string): number | null {
   if (!s || s.trim() === "" || s === "#N/A" || s === "Not Planned") return null;
@@ -86,5 +86,171 @@ export const fetchSkus = cache(async (): Promise<SkuRow[]> => {
       demand12Week: cleanNum(r[46]),
       demand3Month: cleanNum(r[47]),
       demand16WeekCover: cleanNum(r[48]),
+    }));
+});
+
+function parseDate(s: string): Date | null {
+  if (!s || s.trim() === "") return null;
+  const parts = s.trim().split("/");
+  if (parts.length === 3) {
+    const [d, m, y] = parts;
+    return new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`);
+  }
+  return null;
+}
+
+function urgency(dueDateStr: string): PackingRow["urgency"] {
+  const due = parseDate(dueDateStr);
+  if (!due) return "upcoming";
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const diff = (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+  if (diff < 0) return "overdue";
+  if (diff <= 7) return "this_week";
+  return "upcoming";
+}
+
+export const fetchProduction = cache(async (): Promise<ProductionRow[]> => {
+  const sheets = await getSheets();
+  const sheetId = process.env.SHEET_ID;
+  if (!sheetId) throw new Error("SHEET_ID env var missing");
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: "New Production Master!A1:W430",
+  });
+
+  const rows = res.data.values ?? [];
+  return rows
+    .slice(3)
+    .filter((r) => r[3] && r[3].trim() !== "")
+    .map((r): ProductionRow => {
+      const qty = cleanNum(r[9]);
+      const received = cleanNum(r[10]);
+      let status: ProductionRow["status"] = "open";
+      if (received !== null && qty !== null && received >= qty) status = "complete";
+      else if (received !== null && received > 0) status = "partial";
+      return {
+        vendor: r[0] ?? "",
+        vendorName: r[1] ?? "",
+        orderType: (r[2] ?? "").trim(),
+        order: r[3] ?? "",
+        raisedDate: r[4] ?? "",
+        productionDate: r[5] ?? "",
+        dueDate: r[6] ?? "",
+        partNumber: r[7] ?? "",
+        description: r[8] ?? "",
+        quantity: qty,
+        received,
+        unit: r[11] ?? "",
+        cost: r[12] ?? "",
+        costPerUnit: (() => { const n = parseFloat((r[12] ?? "").replace(/[£,\s]/g, "")); return isNaN(n) ? null : n; })(),
+        workOrder: r[14] ?? "",
+        poStatus: r[15] ?? "",
+        kitStatus: r[16] ?? "",
+        completionDate: r[20] ?? "",
+        status,
+      };
+    });
+});
+
+export const fetchWNPPlanning = cache(async (): Promise<PlanningRow[]> => {
+  const sheets = await getSheets();
+  const sheetId = process.env.SHEET_ID;
+  if (!sheetId) throw new Error("SHEET_ID env var missing");
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: "WNP PLANNING!A1:V1048",
+  });
+
+  const rows = res.data.values ?? [];
+  return rows
+    .slice(3)
+    .filter((r) => r[7] && r[7].trim() !== "")
+    .map((r): PlanningRow => {
+      const qty = cleanNum(r[6]);
+      const produced = cleanNum(r[8]);
+      const statusText = (r[21] ?? "").toUpperCase().trim();
+      let status: PlanningRow["status"] = "planned";
+      if (statusText === "COMPLETED") status = "complete";
+      else if (produced !== null && produced > 0) status = "in_progress";
+      // format batch number: col 14 is sometimes an Excel serial date
+      const batchRaw = r[14] ?? "";
+      const batch = batchRaw && !isNaN(Number(batchRaw)) && Number(batchRaw) > 40000
+        ? new Date(Math.round((Number(batchRaw) - 25569) * 86400 * 1000)).toLocaleDateString("en-GB")
+        : batchRaw;
+      return {
+        plannedWeek: r[0] ?? "",
+        plannedDays: r[1] ?? "",
+        bulkCode: r[2] ?? "",
+        productCode: r[3] ?? "",
+        description: r[4] ?? "",
+        fill: cleanNum(r[5]),
+        quantity: qty,
+        workOrderNo: r[7] ?? "",
+        quantityProduced: produced,
+        bulkAtWNP: r[9] ?? "",
+        notes: r[10] ?? "",
+        currentStock: cleanNum(r[11]),
+        batch,
+        bbd: r[15] ?? "",
+        dateCompleted: r[16] ?? "",
+        statusText: r[21] ?? "",
+        status,
+      };
+    });
+});
+
+export const fetchBulkOpenPOs = cache(async (): Promise<BulkPoRow[]> => {
+  const sheets = await getSheets();
+  const sheetId = process.env.SHEET_ID;
+  if (!sheetId) throw new Error("SHEET_ID env var missing");
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: "Open Purchase Orders!A1:L240",
+  });
+
+  const rows = res.data.values ?? [];
+  return rows
+    .slice(1)
+    .filter((r) => r[3] && r[3].trim() !== "") // must have PO
+    .map((r): BulkPoRow => ({
+      vendorNumber: r[0] ?? "",
+      vendorName: r[1] ?? "",
+      order: r[3] ?? "",
+      date: r[4] ?? "",
+      partNumber: r[5] ?? "",
+      description: r[6] ?? "",
+      partType: r[7] ?? "",
+      dueDate: r[10] ?? "",
+      orderQuantity: cleanNum(r[11]),
+    }));
+});
+
+export const fetchPackingSchedule = cache(async (): Promise<PackingRow[]> => {
+  const sheets = await getSheets();
+  const sheetId = process.env.SHEET_ID;
+  if (!sheetId) throw new Error("SHEET_ID env var missing");
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: "Packing Schedule!A1:H470",
+  });
+
+  const rows = res.data.values ?? [];
+  return rows
+    .slice(1)
+    .filter((r) => r[0] && r[0].trim() !== "") // must have part number
+    .map((r): PackingRow => ({
+      partNumber: r[0] ?? "",
+      description: r[1] ?? "",
+      dueDate: r[2] ?? "",
+      purchaseOrder: r[3] ?? "",
+      balance: cleanNum(r[4]),
+      vendorNumber: r[5] ?? "",
+      vendorName: r[6] ?? "",
+      urgency: urgency(r[2] ?? ""),
     }));
 });
