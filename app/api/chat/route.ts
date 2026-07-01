@@ -3,7 +3,6 @@ import { fetchSkus, fetchProduction, fetchWNPPlanning, fetchBulkOpenPOs, fetchPa
 
 export const runtime = "nodejs";
 
-// Very tight context — Groq free tier TPM is as low as 6000, so hard-cap everything
 async function buildContext(): Promise<string> {
   const [skus, production, planning, openPOs, packing] = await Promise.all([
     fetchSkus(),
@@ -13,49 +12,50 @@ async function buildContext(): Promise<string> {
     fetchPackingSchedule(),
   ]);
 
-  const d = (s: string, n = 30) => s.slice(0, n);
+  const d = (s: string, n = 32) => (s ?? "").slice(0, n);
   const parts: string[] = [];
 
-  // SKUs: only the most critical (cover<8w), capped to 20 rows
+  // 1. Critical SKUs — cover < 8 weeks, capped 20
   const critical = skus
     .filter((s) => s.cover !== null && s.cover < 8)
     .sort((a, b) => (a.cover ?? 999) - (b.cover ?? 999))
     .slice(0, 20);
-  parts.push(`Critical SKUs (<8w cover), ${skus.length} total SKUs tracked:\ncode|name|cover|stock|next_del`);
+  parts.push(`## Critical SKUs (<8w cover) — ${skus.length} total SKUs in system\ncode|name|cover|stock|next_bulk_del|next_pack_del`);
   for (const s of critical) {
-    parts.push(`${s.skuCode}|${d(s.description)}|${s.cover}w|${s.inventory ?? "?"}|${s.nextBulkDelivery || s.nextPackingDelivery || "-"}`);
+    parts.push(`${s.skuCode}|${d(s.description)}|${s.cover}w|${s.inventory??"-"}|${s.nextBulkDelivery||"-"}|${s.nextPackingDelivery||"-"}`);
   }
 
-  // All external production POs — open AND completed — needed for historical spend queries
-  // Sorted newest first; cap 40 rows total
+  // 2. Internal WNP planning — ALL rows (active + complete) so batch/history questions work
+  // Take last 80 rows from the sheet (sheet order = chronological, newest at bottom)
+  const allPlan = planning.slice(-80);
+  parts.push(`\n## Internal WNP Production Planning — ALL rows incl. completed (${allPlan.length} of ${planning.length} shown, most recent last)\nwo|bulk_code|prod_code|description|fill|week|qty_planned|qty_produced|batch|bbd|completed|status`);
+  for (const r of allPlan) {
+    parts.push(`${r.workOrderNo||"-"}|${r.bulkCode||"-"}|${r.productCode||"-"}|${d(r.description)}|${r.fill??"-"}|${r.plannedWeek||"-"}|${r.quantity??"-"}|${r.quantityProduced??"-"}|${r.batch||"-"}|${r.bbd||"-"}|${r.dateCompleted||"-"}|${r.statusText||r.status}`);
+  }
+
+  // 3. External production POs — ALL (open + complete), newest first, cap 35
   const sortedProd = [...production]
     .sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""))
-    .slice(0, 40);
-  parts.push(`\nExternal production POs (ALL, open+completed, newest first, ${sortedProd.length} shown of ${production.length}):\npo|part|desc|due|qty|£/unit|status`);
+    .slice(0, 35);
+  parts.push(`\n## External Production POs (ALL open+completed, ${sortedProd.length} of ${production.length} shown)\npo|wo|part|description|due|qty|received|£/unit|status`);
   for (const r of sortedProd) {
-    parts.push(`${r.order||"-"}|${r.partNumber||"-"}|${d(r.description,26)}|${r.dueDate||"-"}|${r.quantity??"-"}|£${r.costPerUnit??"-"}|${r.status}`);
+    parts.push(`${r.order||"-"}|${r.workOrder||"-"}|${r.partNumber||"-"}|${d(r.description)}|${r.dueDate||"-"}|${r.quantity??"-"}|${r.received??"-"}|£${r.costPerUnit??"-"}|${r.status}`);
   }
 
-  // Internal planning — active only, cap 15
-  const activePlan = planning
-    .filter((r) => r.status !== "complete")
-    .slice(0, 15);
-  parts.push(`\nInternal WNP planning — active/not-yet-complete only (showing ${activePlan.length}):\nbulk|desc|week|qty|status`);
-  for (const r of activePlan) {
-    parts.push(`${r.bulkCode||"-"}|${d(r.description,26)}|${r.plannedWeek||"-"}|${r.quantity??"-"}|${r.statusText||r.status}`);
+  // 4. Open bulk ingredient POs (this sheet = open only), cap 20
+  parts.push(`\n## Open Bulk Ingredient POs (${openPOs.length} total, showing 20)\npo|vendor|part|description|qty|due`);
+  for (const r of openPOs.slice(0, 20)) {
+    parts.push(`${r.order||"-"}|${d(r.vendorName,18)}|${r.partNumber||"-"}|${d(r.description)}|${r.orderQuantity??"-"}|${r.dueDate||"-"}`);
   }
 
-  // Bulk open POs — cap 15 (this sheet only ever contains open orders)
-  parts.push(`\nOpen bulk ingredient POs — these are ALL open (${openPOs.length} total, showing 15):\nvendor|desc|qty|due`);
-  for (const r of openPOs.slice(0, 15)) {
-    parts.push(`${d(r.vendorName,16)}|${d(r.description,26)}|${r.orderQuantity??"-"}|${r.dueDate||"-"}`);
-  }
-
-  // Packing — urgent only, cap 10
-  const urgentPack = packing.filter((r) => r.urgency === "overdue" || r.urgency === "this_week");
-  parts.push(`\nUrgent packing — overdue or due this week only (${urgentPack.length} total, showing 10):\ndesc|bal|due`);
-  for (const r of urgentPack.slice(0, 10)) {
-    parts.push(`${d(r.description,26)}|${r.balance??"-"}|${r.dueDate||"-"}`);
+  // 5. Packing schedule — all upcoming + overdue, cap 20
+  const upcomingPack = packing
+    .filter((r) => r.urgency !== undefined)
+    .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""))
+    .slice(0, 20);
+  parts.push(`\n## Packing Schedule (${upcomingPack.length} of ${packing.length} shown, sorted by due date)\npart|description|due|balance|vendor|urgency`);
+  for (const r of upcomingPack) {
+    parts.push(`${r.partNumber||"-"}|${d(r.description)}|${r.dueDate||"-"}|${r.balance??"-"}|${d(r.vendorName||"Internal",18)}|${r.urgency}`);
   }
 
   return parts.join("\n");
@@ -91,14 +91,23 @@ export async function POST(req: NextRequest) {
 - Price in External Production is per 1,000 capsules/units. Order qty is in thousands.
 - Total cost = quantity × cost_per_unit (e.g. qty=325, cost=£11.39 → total=£3,701.75)
 
+## Planning data fields:
+- wo = work order number, bulk_code = 1-code bulk ingredient, prod_code = 3-code finished product
+- fill = capsule count per batch (e.g. 90, 60) — NOT a percentage
+- qty_planned = batches planned, qty_produced = batches actually made
+- batch = batch number, bbd = best before date, completed = date production finished
+- status: planned / in_progress / complete
+
 ## Query rules:
-- "When is X arriving / delivery ETA" → use OPEN orders only; find the row whose description/part matches, return the due date.
-- "Packing" questions → filter to 3-code part numbers only.
-- "Bulk / capsule" questions → filter to 1-code part numbers only.
-- "Raw material" questions → filter to 2-code part numbers only.
-- Ambiguous product names (multiple rows match) → list ALL matching rows with PO, vendor, qty, due date, cost — don't pick one at random.
-- Historical spend questions (e.g. "how much did we spend Jan–Mar") → use ALL orders in the date range (open AND completed), filter by code type, return PO-by-PO breakdown then grand total.
-- If something genuinely isn't in the data, say so — don't invent it.
+- Batch/production history questions → search the WNP Planning table by description, bulk_code, prod_code, or batch number. Include completed rows.
+- "When is X arriving / delivery ETA" → OPEN orders only; match by description or part number, return due date.
+- "Packing" questions → filter to 3-code part numbers only (prod_code or part column).
+- "Bulk / capsule production" questions → filter to 1-code (bulk_code column in planning, or part starting with 10000 in external POs).
+- "Raw material" questions → filter to 2-code part numbers.
+- Ambiguous product names → list ALL matching rows with key identifiers, don't guess.
+- Historical spend (date range) → include ALL orders (open+completed) in that range, PO-by-PO breakdown then total.
+- Never say "no data available" unless the relevant section is genuinely empty — search all sections before responding.
+- Do NOT narrate your search process. Just return the answer directly with the matching rows. Skip lines like "I will look at..." or "I found that...". Start with the result.
 
 LIVE DATA:
 ${context}`;
@@ -113,7 +122,7 @@ ${context}`;
       ...recentMessages.map((m) => ({ role: m.role, content: m.content })),
     ],
     temperature: 0.2,
-    max_tokens: 600,
+    max_tokens: 800,
     stream: true,
   };
 
