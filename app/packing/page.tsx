@@ -1,11 +1,11 @@
-import { fetchPackingSchedule, fetchWNPPlanning } from "@/lib/sheets";
+import { fetchPackingSchedule, fetchWNPPlanning, fetchSkus } from "@/lib/sheets";
 import { futureDateFull } from "@/lib/markets";
 import FilterBar from "@/components/FilterBar";
 import { Suspense } from "react";
 
 export const revalidate = 0;
 
-type Urgency = "overdue" | "this_week" | "upcoming" | "planned" | "not_planned";
+type Urgency = "overdue" | "this_week" | "upcoming" | "planned" | "not_planned" | "sufficient_stock";
 
 function UrgencyBadge({ urgency }: { urgency: Urgency }) {
   const map: Record<Urgency, string> = {
@@ -14,6 +14,7 @@ function UrgencyBadge({ urgency }: { urgency: Urgency }) {
     upcoming: "bg-cream-dark text-text-muted",
     planned: "bg-emerald-100 text-emerald-700",
     not_planned: "bg-red-100 text-red-700",
+    sufficient_stock: "bg-blue-100 text-blue-700",
   };
   const labels: Record<Urgency, string> = {
     overdue: "Overdue",
@@ -21,6 +22,7 @@ function UrgencyBadge({ urgency }: { urgency: Urgency }) {
     upcoming: "Upcoming",
     planned: "Planned (Internal)",
     not_planned: "Not Planned ⚠",
+    sufficient_stock: "Sufficient Stock",
   };
   return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${map[urgency]}`}>{labels[urgency]}</span>;
 }
@@ -46,9 +48,10 @@ export default async function PackingPage({
 }: {
   searchParams: { search?: string; vendor?: string; urgency?: string; dateFrom?: string; dateTo?: string };
 }) {
-  const [rows, planningRows] = await Promise.all([
+  const [rows, planningRows, skuRows] = await Promise.all([
     fetchPackingSchedule(),
     fetchWNPPlanning(),
+    fetchSkus(),
   ]);
 
   // Build a set of product codes that are in WNP planning (planned or in progress)
@@ -58,12 +61,25 @@ export default async function PackingPage({
       .map((r) => r.productCode)
   );
 
+  // Build a cover map from SKU data (keyed by SKU code)
+  const coverMap = new Map<string, number>();
+  for (const s of skuRows) {
+    if (s.skuCode && s.totalWeeksCover !== null) {
+      coverMap.set(s.skuCode.trim(), s.totalWeeksCover);
+    }
+  }
+
   // Augment rows with resolved urgency
   const augmented = rows.map((r) => {
     const isInternal = !r.vendorName.trim();
     let urgency: Urgency;
     if (isInternal) {
-      urgency = plannedInWNP.has(r.partNumber) ? "planned" : "not_planned";
+      if (plannedInWNP.has(r.partNumber)) {
+        urgency = "planned";
+      } else {
+        const cover = coverMap.get(r.partNumber.trim());
+        urgency = (cover !== undefined && cover >= 16) ? "sufficient_stock" : "not_planned";
+      }
     } else {
       urgency = r.urgency as Urgency;
     }
@@ -99,6 +115,7 @@ export default async function PackingPage({
     not_planned: augmented.filter((r) => r.urgency === "not_planned").length,
     planned: augmented.filter((r) => r.urgency === "planned").length,
     upcoming: augmented.filter((r) => r.urgency === "upcoming").length,
+    sufficient_stock: augmented.filter((r) => r.urgency === "sufficient_stock").length,
   };
 
   return (
@@ -108,13 +125,14 @@ export default async function PackingPage({
         <p className="text-text-muted text-sm mt-2 tracking-wide">Active packing orders — sorted by due date</p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         {[
           { label: "Overdue", count: counts.overdue, color: "text-red-600" },
           { label: "Due This Week", count: counts.this_week, color: "text-amber-600" },
           { label: "Not Planned ⚠", count: counts.not_planned, color: "text-red-600" },
           { label: "Planned (Internal)", count: counts.planned, color: "text-emerald-600" },
           { label: "Upcoming", count: counts.upcoming, color: "text-charcoal" },
+          { label: "Sufficient Stock", count: counts.sufficient_stock, color: "text-blue-600" },
         ].map(({ label, count, color }) => (
           <div key={label} className="bg-white rounded-2xl border border-[#e4ddd4] px-4 py-4">
             <p className="text-[10px] tracking-widest uppercase text-text-muted mb-1">{label}</p>
@@ -133,6 +151,7 @@ export default async function PackingPage({
               { value: "upcoming", label: "Upcoming" },
               { value: "planned", label: "Planned (Internal)" },
               { value: "not_planned", label: "Not Planned ⚠" },
+              { value: "sufficient_stock", label: "Sufficient Stock" },
             ]},
             { key: "vendor", label: "Vendor", options: vendors.map((v) => ({ value: v, label: v })) },
             { key: "dateFrom", label: "Due From", type: "date" },
@@ -166,7 +185,8 @@ export default async function PackingPage({
                   const rowBg =
                     r.urgency === "overdue" || r.urgency === "not_planned" ? "bg-red-50/30" :
                     r.urgency === "this_week" ? "bg-amber-50/20" :
-                    r.urgency === "planned" ? "bg-emerald-50/20" : "";
+                    r.urgency === "planned" ? "bg-emerald-50/20" :
+                    r.urgency === "sufficient_stock" ? "bg-blue-50/20" : "";
                   return (
                     <tr key={`${r.purchaseOrder}-${r.partNumber}-${i}`} className={`border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors ${rowBg}`}>
                       <td className="px-4 py-3 font-mono text-xs text-copper whitespace-nowrap">{r.partNumber}</td>
