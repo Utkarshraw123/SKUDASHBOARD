@@ -264,8 +264,8 @@ function parseBomMatrix(rows: string[][], type: "rm" | "ancillary"): BomSheet {
   // Row 1 = product names, starting at col 2
   // Row 2 = empty
   // Row 3+ = components: col0=code, col1=name, col2+=qty per product column
-  const productCodes = rows[0].slice(2);
-  const productNames = rows[1].slice(2);
+  const productCodes = rows[0].slice(2).map(v => String(v ?? ""));
+  const productNames = rows[1].slice(2).map(v => String(v ?? ""));
 
   const products = productCodes.map((code, i) => ({
     code,
@@ -276,14 +276,14 @@ function parseBomMatrix(rows: string[][], type: "rm" | "ancillary"): BomSheet {
   const byComponent = new Map<string, { componentName: string; usedIn: { code: string; name: string; qty: number }[] }>();
 
   for (const row of rows.slice(3)) {
-    const compCode = (row[0] ?? "").trim();
-    const compName = (row[1] ?? "").trim();
+    const compCode = String(row[0] ?? "").trim();
+    const compName = String(row[1] ?? "").trim();
     if (!compCode) continue;
 
     const entry = { componentName: compName, usedIn: [] as { code: string; name: string; qty: number }[] };
 
     row.slice(2).forEach((val, i) => {
-      const qty = parseFloat(val);
+      const qty = typeof val === "number" ? val : parseFloat(String(val ?? ""));
       if (!isNaN(qty) && qty > 0 && products[i]) {
         products[i].components.push({ code: compCode, name: compName, qty });
         entry.usedIn.push({ code: products[i].code, name: products[i].name, qty });
