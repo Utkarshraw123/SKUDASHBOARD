@@ -47,7 +47,8 @@ export default async function PlanningPage({
   const dateFrom = searchParams.dateFrom ?? "";
   const dateTo = searchParams.dateTo ?? "";
 
-  let filtered = rows;
+  // newest first
+  let filtered = [...rows].reverse();
   if (search) filtered = filtered.filter((r) =>
     r.description.toLowerCase().includes(search) ||
     r.workOrderNo.toLowerCase().includes(search) ||
@@ -88,6 +89,7 @@ export default async function PlanningPage({
       <Suspense>
         <FilterBar
           searchPlaceholder="Search by SKU, bulk code, description or WO…"
+          periodKeys={{ from: "dateFrom", to: "dateTo" }}
           filters={[
             { key: "status", label: "Status", options: [
               { value: "planned", label: "Planned" },
@@ -96,8 +98,8 @@ export default async function PlanningPage({
             ]},
             { key: "bulkCode", label: "Bulk Code", options: bulkCodes.map((c) => ({ value: c, label: c })) },
             { key: "batch", label: "Batch", options: batches.map((b) => ({ value: b, label: b })) },
-            { key: "dateFrom", label: "Planned From", type: "date" },
-            { key: "dateTo", label: "Planned To", type: "date" },
+            { key: "dateFrom", label: "From", type: "date" },
+            { key: "dateTo", label: "To", type: "date" },
           ]}
         />
       </Suspense>

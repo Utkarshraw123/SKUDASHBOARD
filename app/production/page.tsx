@@ -50,7 +50,8 @@ export default async function ProductionPage({
   const dateFrom = searchParams.dateFrom ?? "";
   const dateTo = searchParams.dateTo ?? "";
 
-  let filtered = rows;
+  // newest first (by raised date, fallback to sheet order reversed)
+  let filtered = [...rows].reverse();
   if (search) filtered = filtered.filter((r) =>
     r.description.toLowerCase().includes(search) ||
     r.partNumber.toLowerCase().includes(search) ||
@@ -100,6 +101,7 @@ export default async function ProductionPage({
       <Suspense>
         <FilterBar
           searchPlaceholder="Search by part, description, PO or WO…"
+          periodKeys={{ from: "dateFrom", to: "dateTo" }}
           filters={[
             { key: "vendor", label: "Vendor", options: vendors.map((v) => ({ value: v, label: v })) },
             { key: "orderType", label: "Order Type", options: orderTypes.map((t) => ({ value: t, label: t })) },
@@ -109,8 +111,8 @@ export default async function ProductionPage({
               { value: "complete", label: "Complete" },
             ]},
             { key: "poStatus", label: "PO Status", options: poStatuses.map((s) => ({ value: s, label: s })) },
-            { key: "dateFrom", label: "Due From", type: "date" },
-            { key: "dateTo", label: "Due To", type: "date" },
+            { key: "dateFrom", label: "From", type: "date" },
+            { key: "dateTo", label: "To", type: "date" },
           ]}
         />
       </Suspense>

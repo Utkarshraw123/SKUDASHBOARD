@@ -144,6 +144,7 @@ export default async function PackingPage({
       <Suspense>
         <FilterBar
           searchPlaceholder="Search by part, description or PO…"
+          periodKeys={{ from: "dateFrom", to: "dateTo" }}
           filters={[
             { key: "urgency", label: "Urgency", options: [
               { value: "overdue", label: "Overdue (External)" },

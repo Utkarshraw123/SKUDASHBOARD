@@ -18,9 +18,32 @@ interface FilterDef {
 interface FilterBarProps {
   searchPlaceholder?: string;
   filters?: FilterDef[];
+  /** If provided, show This Week / This Month shortcuts that set these two URL params */
+  periodKeys?: { from: string; to: string };
 }
 
-export default function FilterBar({ searchPlaceholder = "Search…", filters = [] }: FilterBarProps) {
+function isoDate(d: Date) {
+  return d.toISOString().split("T")[0];
+}
+
+function getWeekRange(): { from: string; to: string } {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - ((day + 6) % 7));
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return { from: isoDate(mon), to: isoDate(sun) };
+}
+
+function getMonthRange(): { from: string; to: string } {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { from: isoDate(from), to: isoDate(to) };
+}
+
+export default function FilterBar({ searchPlaceholder = "Search…", filters = [], periodKeys }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -41,7 +64,42 @@ export default function FilterBar({ searchPlaceholder = "Search…", filters = [
     [router, pathname, searchParams]
   );
 
+  const applyPeriod = useCallback(
+    (range: { from: string; to: string }) => {
+      if (!periodKeys) return;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set(periodKeys.from, range.from);
+      params.set(periodKeys.to, range.to);
+      startTransition(() => {
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      });
+    },
+    [router, pathname, searchParams, periodKeys]
+  );
+
+  const clearPeriod = useCallback(() => {
+    if (!periodKeys) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(periodKeys.from);
+    params.delete(periodKeys.to);
+    startTransition(() => {
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    });
+  }, [router, pathname, searchParams, periodKeys]);
+
+  const activePeriodFrom = periodKeys ? (searchParams.get(periodKeys.from) ?? "") : "";
+  const activePeriodTo   = periodKeys ? (searchParams.get(periodKeys.to)   ?? "") : "";
+  const hasPeriod = activePeriodFrom || activePeriodTo;
+
   const baseInput = "rounded-xl border border-[#e4ddd4] bg-white px-4 py-2.5 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper transition-all";
+  const chipBase  = "px-3 py-2 rounded-xl text-xs font-medium transition-colors border";
+  const chipOn    = "bg-copper text-white border-copper";
+  const chipOff   = "bg-white text-text-muted border-[#e4ddd4] hover:border-copper hover:text-copper";
+
+  const weekRange  = getWeekRange();
+  const monthRange = getMonthRange();
+  const isWeek  = activePeriodFrom === weekRange.from  && activePeriodTo === weekRange.to;
+  const isMonth = activePeriodFrom === monthRange.from && activePeriodTo === monthRange.to;
 
   return (
     <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -59,6 +117,20 @@ export default function FilterBar({ searchPlaceholder = "Search…", filters = [
         </svg>
       </div>
 
+      {/* Quick period chips */}
+      {periodKeys && (
+        <>
+          <button onClick={() => applyPeriod(weekRange)}  className={`${chipBase} ${isWeek  ? chipOn : chipOff}`}>This Week</button>
+          <button onClick={() => applyPeriod(monthRange)} className={`${chipBase} ${isMonth ? chipOn : chipOff}`}>This Month</button>
+          {hasPeriod && !isWeek && !isMonth && (
+            <span className="text-xs text-copper font-medium px-1">Custom range</span>
+          )}
+          {hasPeriod && (
+            <button onClick={clearPeriod} className={`${chipBase} ${chipOff}`}>✕ Clear</button>
+          )}
+        </>
+      )}
+
       {filters.map((f) => {
         if (f.type === "date") {
           return (
@@ -66,7 +138,7 @@ export default function FilterBar({ searchPlaceholder = "Search…", filters = [
               <label className="text-xs text-text-muted whitespace-nowrap">{f.label}</label>
               <input
                 type="date"
-                defaultValue={searchParams.get(f.key) ?? ""}
+                value={searchParams.get(f.key) ?? ""}
                 onChange={(e) => update(f.key, e.target.value)}
                 className={`${baseInput} cursor-pointer`}
               />
