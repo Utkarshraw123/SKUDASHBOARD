@@ -301,7 +301,8 @@ export const fetchRmBom = cache(async (): Promise<BomSheet> => {
   const sheets = await getSheets();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: BOM_SHEET_ID,
-    range: "BOM matrix RM!A1:BZ500",
+    range: "BOM matrix RM!A1:BZ800",
+    valueRenderOption: "UNFORMATTED_VALUE",
   });
   return parseBomMatrix((res.data.values ?? []) as string[][], "rm");
 });
@@ -310,7 +311,8 @@ export const fetchAncillaryBom = cache(async (): Promise<BomSheet> => {
   const sheets = await getSheets();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: BOM_SHEET_ID,
-    range: "BOM Ancillaries!A1:EC500",
+    range: "BOM Ancillaries!A1:EZ800",
+    valueRenderOption: "UNFORMATTED_VALUE",
   });
   return parseBomMatrix((res.data.values ?? []) as string[][], "ancillary");
 });
