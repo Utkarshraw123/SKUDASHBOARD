@@ -108,6 +108,24 @@ export interface PackingRow {
   urgency: "overdue" | "this_week" | "upcoming";
 }
 
+export interface BomComponent {
+  code: string;
+  name: string;
+  qty: number; // per 1,000 capsules for RM BOM; per finished unit for Ancillary BOM
+}
+
+export interface BomProduct {
+  code: string;
+  name: string;
+  components: BomComponent[];
+}
+
+export interface BomSheet {
+  type: "rm" | "ancillary";
+  products: BomProduct[];
+  byComponent: Map<string, { componentName: string; usedIn: { code: string; name: string; qty: number }[] }>;
+}
+
 export type CoverStatus = "critical" | "low" | "ok" | "good" | "unknown";
 
 export function getCoverStatus(cover: number | null): CoverStatus {

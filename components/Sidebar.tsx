@@ -19,6 +19,10 @@ const productionNav = [
   { href: "/purchase-orders", label: "Open Purchase Orders", icon: "≡" },
 ];
 
+const formulaNav = [
+  { href: "/bom", label: "Bill of Materials", icon: "⎆" },
+];
+
 const MODE_LABELS: Record<MarketMode, string> = {
   all: "All SKUs",
   dtc: "DTC & Retail",
@@ -68,6 +72,12 @@ export default function Sidebar({ mode }: { mode: MarketMode }) {
           </div>
 
           {productionNav.map((item) => <NavLink key={item.href} {...item} />)}
+
+          <div className="mt-5 mb-2 px-3">
+            <p className="text-[10px] tracking-widest uppercase text-[#8a8480] font-medium">Formulation</p>
+          </div>
+
+          {formulaNav.map((item) => <NavLink key={item.href} {...item} />)}
         </nav>
 
         {/* Market mode panel */}

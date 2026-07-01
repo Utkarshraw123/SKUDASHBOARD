@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import { cache } from "react";
-import type { SkuRow, ProductionRow, PlanningRow, BulkPoRow, PackingRow } from "./types";
+import type { SkuRow, ProductionRow, PlanningRow, BulkPoRow, PackingRow, BomSheet } from "./types";
 
 function cleanNum(s: string): number | null {
   if (!s || s.trim() === "" || s === "#N/A" || s === "Not Planned") return null;
@@ -253,4 +253,64 @@ export const fetchPackingSchedule = cache(async (): Promise<PackingRow[]> => {
       vendorName: r[6] ?? "",
       urgency: urgency(r[2] ?? ""),
     }));
+});
+
+const BOM_SHEET_ID = "19WdMemJgSpZyMEHfM6zKwEoEJfuKB5yxc4idIWPKn6w";
+
+function parseBomMatrix(rows: string[][], type: "rm" | "ancillary"): BomSheet {
+  if (rows.length < 4) return { type, products: [], byComponent: new Map() };
+
+  // Row 0 = product codes (1-codes or 3-codes), starting at col 2
+  // Row 1 = product names, starting at col 2
+  // Row 2 = empty
+  // Row 3+ = components: col0=code, col1=name, col2+=qty per product column
+  const productCodes = rows[0].slice(2);
+  const productNames = rows[1].slice(2);
+
+  const products = productCodes.map((code, i) => ({
+    code,
+    name: productNames[i] ?? "",
+    components: [] as { code: string; name: string; qty: number }[],
+  }));
+
+  const byComponent = new Map<string, { componentName: string; usedIn: { code: string; name: string; qty: number }[] }>();
+
+  for (const row of rows.slice(3)) {
+    const compCode = (row[0] ?? "").trim();
+    const compName = (row[1] ?? "").trim();
+    if (!compCode) continue;
+
+    const entry = { componentName: compName, usedIn: [] as { code: string; name: string; qty: number }[] };
+
+    row.slice(2).forEach((val, i) => {
+      const qty = parseFloat(val);
+      if (!isNaN(qty) && qty > 0 && products[i]) {
+        products[i].components.push({ code: compCode, name: compName, qty });
+        entry.usedIn.push({ code: products[i].code, name: products[i].name, qty });
+      }
+    });
+
+    if (entry.usedIn.length > 0) byComponent.set(compCode, entry);
+  }
+
+  // Filter out products with no components
+  return { type, products: products.filter(p => p.components.length > 0), byComponent };
+}
+
+export const fetchRmBom = cache(async (): Promise<BomSheet> => {
+  const sheets = await getSheets();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: BOM_SHEET_ID,
+    range: "BOM matrix RM!A1:BZ500",
+  });
+  return parseBomMatrix((res.data.values ?? []) as string[][], "rm");
+});
+
+export const fetchAncillaryBom = cache(async (): Promise<BomSheet> => {
+  const sheets = await getSheets();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: BOM_SHEET_ID,
+    range: "BOM Ancillaries!A1:EC500",
+  });
+  return parseBomMatrix((res.data.values ?? []) as string[][], "ancillary");
 });
