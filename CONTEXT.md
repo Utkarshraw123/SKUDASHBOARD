@@ -119,7 +119,7 @@ User's manual process, now automated: week-on-week cover sheet + current stock +
 
 ## 8. Known issues / pending
 
-- **Rotate the exposed GitHub personal access token** (a `ghp_…` token was leaked in an earlier chat session — still pending; user knows which one).
+- ~~Rotate the exposed GitHub personal access token~~ — DONE 2026-07-03 (leaked tokens deleted by user).
 - Verify BOM fix live: product 30000619 (Collagen 500 Plus Jar) should now show jars/labels/boxes, not just lids (fixed via UNFORMATTED_VALUE + range EZ800).
 - Procurement unit assumptions above (§6) need user confirmation against manual plan.
 - Buffers/targets are constants in `lib/procurement.ts` — could become UI-configurable.
