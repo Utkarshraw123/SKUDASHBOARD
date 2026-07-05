@@ -1,6 +1,7 @@
 import { fetchSkus } from "@/lib/sheets";
 import { getMarketMode, filterSkusByMode } from "@/lib/markets";
 import FilterBar from "@/components/FilterBar";
+import ExportCsvButton from "@/components/ExportCsvButton";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -108,6 +109,9 @@ export default async function VariancePage({
             <h2 className="font-serif text-lg text-charcoal">Outperforming <span className="text-text-muted text-sm font-sans font-normal">({outperforming.length})</span></h2>
           </div>
           <div className="bg-white rounded-2xl border border-[#e4ddd4] overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e4ddd4] bg-cream flex items-center justify-end">
+              <ExportCsvButton filename="variance-outperforming" />
+            </div>
             <VarianceTable rows={outperforming} positive={true} />
           </div>
         </div>
@@ -120,6 +124,9 @@ export default async function VariancePage({
             <h2 className="font-serif text-lg text-charcoal">Underperforming <span className="text-text-muted text-sm font-sans font-normal">({underperforming.length})</span></h2>
           </div>
           <div className="bg-white rounded-2xl border border-[#e4ddd4] overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e4ddd4] bg-cream flex items-center justify-end">
+              <ExportCsvButton filename="variance-underperforming" />
+            </div>
             <VarianceTable rows={underperforming} positive={false} />
           </div>
         </div>

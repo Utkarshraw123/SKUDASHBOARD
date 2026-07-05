@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { BomSheet } from "@/lib/types";
+import ExportCsvButton from "./ExportCsvButton";
 
 type Props = { rmBom: BomSheet; ancBom: BomSheet };
 
@@ -165,10 +166,13 @@ export default function BomSearch({ rmBom, ancBom }: Props) {
                   <Badge label={item.bom === "rm" ? "Raw Material BOM" : "Ancillary BOM"} color="bg-cream-dark text-text-muted" />
                 </div>
                 <p className="text-base font-medium text-charcoal mt-1">{item.name}</p>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Used in <strong>{item.usedIn.length}</strong> product{item.usedIn.length !== 1 ? "s" : ""} ·{" "}
-                  {item.bom === "rm" ? "Qty = kg per 1,000 capsules" : "Qty = units per finished product"}
-                </p>
+                <div className="flex items-center justify-between mt-0.5">
+                  <p className="text-xs text-text-muted">
+                    Used in <strong>{item.usedIn.length}</strong> product{item.usedIn.length !== 1 ? "s" : ""} ·{" "}
+                    {item.bom === "rm" ? "Qty = kg per 1,000 capsules" : "Qty = units per finished product"}
+                  </p>
+                  <ExportCsvButton filename={`bom-where-used-${item.code}`} />
+                </div>
               </div>
               {/* Table */}
               <div className="overflow-x-auto">
@@ -217,10 +221,13 @@ export default function BomSearch({ rmBom, ancBom }: Props) {
                   <Badge label={item.bom === "rm" ? "Raw Material BOM" : "Ancillary BOM"} color="bg-cream-dark text-text-muted" />
                 </div>
                 <p className="text-base font-medium text-charcoal mt-1">{item.name}</p>
-                <p className="text-xs text-text-muted mt-0.5">
-                  <strong>{item.components.length}</strong> component{item.components.length !== 1 ? "s" : ""} ·{" "}
-                  {item.bom === "rm" ? "Qty = kg per 1,000 capsules" : "Qty = units per finished product"}
-                </p>
+                <div className="flex items-center justify-between mt-0.5">
+                  <p className="text-xs text-text-muted">
+                    <strong>{item.components.length}</strong> component{item.components.length !== 1 ? "s" : ""} ·{" "}
+                    {item.bom === "rm" ? "Qty = kg per 1,000 capsules" : "Qty = units per finished product"}
+                  </p>
+                  <ExportCsvButton filename={`bom-${item.code}`} />
+                </div>
               </div>
               {/* Table */}
               <div className="overflow-x-auto">

@@ -3,6 +3,7 @@ import { getCoverStatus } from "@/lib/types";
 import { getMarketMode, filterSkusByMode, futureDateOnly } from "@/lib/markets";
 import CoverBadge from "@/components/CoverBadge";
 import FilterBar from "@/components/FilterBar";
+import ExportCsvButton from "@/components/ExportCsvButton";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -70,6 +71,9 @@ export default async function RiskPage({
       </Suspense>
 
       <div className="bg-white rounded-2xl border border-[#e4ddd4] overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#e4ddd4] bg-cream text-xs text-text-muted flex items-center justify-end">
+          <ExportCsvButton filename="cover-risk" />
+        </div>
         {atRisk.length === 0 ? (
           <p className="px-5 py-10 text-center text-text-muted text-sm">No results match your filters.</p>
         ) : (

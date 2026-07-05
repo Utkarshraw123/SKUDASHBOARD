@@ -256,6 +256,38 @@ export const fetchPackingSchedule = cache(async (): Promise<PackingRow[]> => {
 });
 
 const BOM_SHEET_ID = "19WdMemJgSpZyMEHfM6zKwEoEJfuKB5yxc4idIWPKn6w";
+const STOCK_SHEET_ID = "1zMaD2kNKedl3G4UWZrEfqJHIknT6m-Nfr0JrpBYf3v0";
+
+export interface InventoryRow {
+  warehouse: string;
+  warehouseDesc: string;
+  partNumber: string;
+  description: string;
+  balance: number;
+  unit: string;
+}
+
+export const fetchCurrentInventory = cache(async (): Promise<InventoryRow[]> => {
+  const sheets = await getSheets();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: STOCK_SHEET_ID,
+    range: "Current Inventory!A1:F5000",
+  });
+  const rows = (res.data.values ?? []) as string[][];
+  // Find the header row (contains "Part Number"), data follows
+  const headerIdx = rows.findIndex(r => (r[2] ?? "").trim() === "Part Number");
+  return rows
+    .slice(headerIdx + 1)
+    .filter(r => r[2] && String(r[2]).trim() !== "")
+    .map(r => ({
+      warehouse: String(r[0] ?? "").trim(),
+      warehouseDesc: String(r[1] ?? "").trim(),
+      partNumber: String(r[2] ?? "").trim(),
+      description: String(r[3] ?? "").trim(),
+      balance: cleanNum(String(r[4] ?? "")) ?? 0,
+      unit: String(r[5] ?? "").trim(),
+    }));
+});
 
 function parseBomMatrix(rows: string[][], type: "rm" | "ancillary"): BomSheet {
   if (rows.length < 4) return { type, products: [], byComponent: new Map() };

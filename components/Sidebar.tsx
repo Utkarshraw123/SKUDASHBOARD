@@ -21,6 +21,7 @@ const productionNav = [
 
 const formulaNav = [
   { href: "/bom", label: "Bill of Materials", icon: "⎆" },
+  { href: "/procurement", label: "Procurement Planner", icon: "◎" },
 ];
 
 const MODE_LABELS: Record<MarketMode, string> = {

@@ -56,6 +56,7 @@ For each SKU with weekly demand > 0:
 - 4 sections (FG, Bulk, RM, Ancillaries), each a table with KPI summary
 - Every row expandable: full calculation trail (gross requirement, committed usage, stock by warehouse group, open POs with PO numbers, buffer, net order)
 - Rows fully covered by stock/POs still shown greyed with reason, e.g. "No order needed — covered by PO WN12345"
+- **Open PO cutoff:** only POs with a due date on or before the cycle end date count as incoming supply; POs landing after the cycle end are ignored
 - CSV export per section (later enhancement)
 
 ## Non-Goals
