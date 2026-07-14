@@ -109,10 +109,23 @@ User's manual process, now automated: week-on-week cover sheet + current stock +
 1. Bulk PO quantities assumed in thousands of caps (×1000) while warehouse bulk stock assumed in actual capsule count — VERIFY with real numbers.
 2. Collagen/magnesium 20w target matched by description regex — user may want explicit SKU list.
 
+## 6b. Production Reporting Form (deployed 2026-07-03)
+
+Supervisor-facing form for internal production reporting → appends to a dedicated sheet for month-end reconciliation.
+
+- **Route `/planning/report`** — shareable link + "New Production Report" button on Internal Production page. Password-gated (`12345`, env `PRODUCTION_REPORT_PASSWORD`), re-verified server-side.
+- **Pre-fill (Option A):** supervisor searches a Work Order (from WNP Planning, newest first, de-duped); auto-fills Description (fallback to SKU dashboard), SKU, product Batch/BBD, Bulk Code, Bulk Description (looked up from bulk code via Current Inventory). All editable. Manual: Bulk Batch, Bulk BBD, Used, Made, People, WO Status, per-part Waste (Capsules/Jars/Lids/Labels/Box/Pouches/Desiccants).
+- **`lib/production-report.ts`** — `computeWastage()` pure fn. Capsule % = waste/used; ancillary % = waste/(made+waste); blended = simple average of consumed parts (NOTE: one high part skews it — user may want weighted later). `REPORT_HEADERS` + `reportToRow()`.
+- **`app/api/production-report/route.ts`** — POST, verifies password, computes wastage, calls `appendProductionReport()`. Slack deferred; clean insertion point here.
+- **`appendProductionReport()` in sheets.ts** — auto-creates `Reports` tab + header row on first write, appends row. Service account scope upgraded `spreadsheets.readonly` → `spreadsheets` (read+write).
+- **Target sheet:** `PRODUCTION_REPORTS_SHEET_ID` = `1WliT7s1RWt6wfaC1Wg4d9AaubhA6zFvTWOeKN3OoRzc` (shared with service account as Editor). Tab `Reports`, 29 columns.
+- End-to-end write tested & verified 2026-07-03.
+- **Pending:** Slack integration (later); blended-wastage formula may switch to weighted; consider gating whole thing behind admin auth instead of shared pw.
+
 ## 7. Environment / deploy
 
-- `.env.local` (gitignored): `GOOGLE_SERVICE_ACCOUNT_JSON` (stringified JSON), `SHEET_ID`, `GROQ_API_KEY`. Same three set in Vercel.
-- Deploy = `git push` to main → Vercel auto-builds.
+- `.env.local` (gitignored): `GOOGLE_SERVICE_ACCOUNT_JSON` (stringified JSON), `SHEET_ID`, `GROQ_API_KEY`, `PRODUCTION_REPORTS_SHEET_ID`, `PRODUCTION_REPORT_PASSWORD`. All must also be set in Vercel (the two PRODUCTION_* vars added 2026-07-03 — needed for the report form to write on the live site).
+- Deploy = `git push` to main → Vercel auto-builds. Env var changes require a redeploy to take effect.
 - tsconfig target predates ES2015 iteration: use `Array.from(map.values())`, not `for..of map.values()`.
 - Node script debugging pattern: `node --env-file=.env.local -e "..."` (dotenv not installed).
 - If localhost looks unstyled/black-and-white: stale dev server holding port 3000 (new one silently takes 3001) — kill both, `rm -rf .next`, restart.
