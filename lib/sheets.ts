@@ -350,6 +350,86 @@ export const fetchAncillaryBom = cache(async (): Promise<BomSheet> => {
   return parseBomMatrix((res.data.values ?? []) as string[][], "ancillary");
 });
 
+const PRODUCTION_INPUT_SHEET_ID = "1NnS9fg1mFxnWljbjUUXG9701mUPbvrVyiZ2Lbo2Hplw";
+
+export interface ProductionInputRow {
+  date: string;          // DD/MM/YYYY
+  weekNumber: string;
+  employee: string;
+  shift: string;
+  machine: string;
+  plannedQty: number | null;
+  actualQty: number | null;
+  present: boolean;
+  product: string;       // code
+  capsuleSize: string;
+  speed: string;
+  description: string;
+  comments: string;
+}
+
+export const fetchProductionInput = cache(async (): Promise<ProductionInputRow[]> => {
+  const sheets = await getSheets();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: PRODUCTION_INPUT_SHEET_ID,
+    range: "INPUT!A1:N1200",
+  });
+  const rows = (res.data.values ?? []) as string[][];
+  return rows
+    .slice(1)
+    .filter(r => r[0] && String(r[0]).trim() !== "" && r[4] && String(r[4]).trim() !== "")
+    .map(r => ({
+      date: String(r[0] ?? "").trim(),
+      weekNumber: String(r[1] ?? "").trim(),
+      employee: String(r[2] ?? "").trim(),
+      shift: String(r[3] ?? "").trim(),
+      machine: String(r[4] ?? "").trim(),
+      plannedQty: cleanNum(String(r[5] ?? "")),
+      actualQty: cleanNum(String(r[6] ?? "")),
+      present: String(r[7] ?? "").trim().toLowerCase() === "yes",
+      product: String(r[9] ?? "").trim(),
+      capsuleSize: String(r[10] ?? "").trim(),
+      speed: String(r[11] ?? "").trim(),
+      description: String(r[12] ?? "").trim(),
+      comments: String(r[13] ?? "").trim(),
+    }));
+});
+
+export interface ProductionReportRecord {
+  timestamp: string;
+  workOrder: string;
+  sku: string;
+  description: string;
+  made: number;
+  blendedWastePct: number;
+}
+
+// Read submitted production reports (wastage) back from the Reports tab.
+export const fetchProductionReports = cache(async (): Promise<ProductionReportRecord[]> => {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) return [];
+  const sheets = await getSheets();
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: "Reports!A2:AC2000",
+    });
+    const rows = (res.data.values ?? []) as string[][];
+    return rows
+      .filter(r => r[1] && String(r[1]).trim() !== "")
+      .map(r => ({
+        timestamp: String(r[0] ?? ""),
+        workOrder: String(r[1] ?? ""),
+        sku: String(r[2] ?? ""),
+        description: String(r[3] ?? ""),
+        made: cleanNum(String(r[11] ?? "")) ?? 0,
+        blendedWastePct: cleanNum(String(r[28] ?? "")) ?? 0,
+      }));
+  } catch {
+    return [];
+  }
+});
+
 // Look up a bulk (or any part) description from the Current Inventory tab.
 export async function fetchPartDescription(partNumber: string): Promise<string> {
   const inv = await fetchCurrentInventory();
