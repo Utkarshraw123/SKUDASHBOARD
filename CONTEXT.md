@@ -122,6 +122,18 @@ Supervisor-facing form for internal production reporting → appends to a dedica
 - End-to-end write tested & verified 2026-07-03.
 - **Pending:** Slack integration (later); blended-wastage formula may switch to weighted; consider gating whole thing behind admin auth instead of shared pw.
 
+## 6c. Production Performance section (deployed 2026-07-03)
+
+Analytics of the production room from a shared production-tracking sheet.
+
+- **Route `/planning/performance`** — "Production Performance" in sidebar (Production group).
+- **Data:** Production INPUT sheet `1NnS9fg1mFxnWljbjUUXG9701mUPbvrVyiZ2Lbo2Hplw` tab `INPUT` (hardcoded ID, shared with service account read-only). One row per employee×machine×shift×day: Date, Week, Employee, Shift, Machine, Planned Qty, Actual Qty, Present, Efficiency, Product, Capsule Size, Speed, Description, Comments. `fetchProductionInput()`. Plus `fetchProductionReports()` reads back the Reports tab for wastage.
+- **Metrics:** Efficiency = Actual÷Planned (Planned = supervisor's flexible daily target); roll-ups weighted (Σactual÷Σplanned). Yield = 100 − blended wastage% (from reports). RAG: green ≥90, amber 75-90, red <75.
+- **`lib/performance.ts`** — pure `computePerformance()`: KPIs, groupBy machine/employee/shift/product (weighted eff + RAG + below-target), daily/weekly trend (weekly if span >45d), wastage summary. Unit-testable.
+- **`components/PerformanceView.tsx`** — client: KPI row, Recharts ComposedChart (output bars + efficiency line), 4 expandable breakdown tables (drill to tasks + Comments), wastage panel (graceful empty state), CSV export per table.
+- **Filters:** date range + This Week/This Month + Machine/Employee/Shift selects (server-side via searchParams).
+- Verified live on real data: ~915 rows, output 1.09M, weighted eff 98%.
+
 ## 7. Environment / deploy
 
 - `.env.local` (gitignored): `GOOGLE_SERVICE_ACCOUNT_JSON` (stringified JSON), `SHEET_ID`, `GROQ_API_KEY`, `PRODUCTION_REPORTS_SHEET_ID`, `PRODUCTION_REPORT_PASSWORD`. All must also be set in Vercel (the two PRODUCTION_* vars added 2026-07-03 — needed for the report form to write on the live site).
