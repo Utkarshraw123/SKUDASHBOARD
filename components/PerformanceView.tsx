@@ -42,8 +42,8 @@ const TH = "px-4 py-3 text-[10px] tracking-widest uppercase text-text-muted font
 const TD = "px-4 py-3 whitespace-nowrap";
 
 function BreakdownTable({
-  title, subtitle, stats, exportName, unit = "task",
-}: { title: string; subtitle: string; stats: GroupStat[]; exportName: string; unit?: string }) {
+  title, subtitle, stats, exportName, unit = "task", showDaysWorked = false,
+}: { title: string; subtitle: string; stats: GroupStat[]; exportName: string; unit?: string; showDaysWorked?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="mb-8">
@@ -65,6 +65,7 @@ function BreakdownTable({
                 <th className={`${TH} text-right`}>Actual</th>
                 <th className={`${TH} text-right`}>Efficiency</th>
                 <th className={`${TH} text-right`}>{unit === "task" ? "Tasks" : unit}</th>
+                {showDaysWorked && <th className={`${TH} text-right`}>Days Worked</th>}
                 <th className={`${TH} text-right`}>Below Target</th>
               </tr>
             </thead>
@@ -81,12 +82,13 @@ function BreakdownTable({
                       <td className={`${TD} text-right font-medium`}>{fmt(s.actual)}</td>
                       <td className={`${TD} text-right`}><EffBadge pct={s.efficiency} /></td>
                       <td className={`${TD} text-right text-text-muted`}>{s.tasks}</td>
+                      {showDaysWorked && <td className={`${TD} text-right text-text-muted`}>{new Set(s.rows.map(r => r.date)).size}</td>}
                       <td className={`${TD} text-right ${s.belowTarget > 0 ? "text-red-600 font-medium" : "text-text-muted"}`}>{s.belowTarget}</td>
                     </tr>
                     {isOpen && (
                       <tr className="bg-cream/50 border-b border-[#e4ddd4]/60">
                         <td></td>
-                        <td colSpan={6} className="px-4 py-3">
+                        <td colSpan={showDaysWorked ? 7 : 6} className="px-4 py-3">
                           <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                               <thead>
@@ -173,7 +175,7 @@ export default function PerformanceView({ data }: { data: PerformanceData }) {
       </div>
 
       <BreakdownTable title="By Machine" subtitle="Sorted worst-efficiency first — bottlenecks at the top. Click to see the tasks and supervisor comments." stats={data.byMachine} exportName="performance-by-machine" />
-      <BreakdownTable title="By Employee" subtitle="Output and efficiency per person. Click to expand tasks." stats={data.byEmployee} exportName="performance-by-employee" />
+      <BreakdownTable title="By Employee" subtitle="Output and efficiency per person. Click to expand tasks." stats={data.byEmployee} exportName="performance-by-employee" showDaysWorked />
       <BreakdownTable title="By Shift" subtitle="Shift comparison." stats={data.byShift} exportName="performance-by-shift" />
       <BreakdownTable title="By Product" subtitle="Which SKUs run efficiently vs. drag." stats={data.byProduct} exportName="performance-by-product" />
 

@@ -134,6 +134,13 @@ Analytics of the production room from a shared production-tracking sheet.
 - **Filters:** date range + This Week/This Month + Machine/Employee/Shift selects (server-side via searchParams).
 - Verified live on real data: ~915 rows, output 1.09M, weighted eff 98%.
 
+## 6d. Platform polish (overnight 2026-07-03)
+
+- `app/error.tsx` — friendly retry screen replaces raw "Application error" (Sheets hiccups are transient; retry usually fixes).
+- `loading.tsx` skeletons (via `components/PageSkeleton.tsx`) on all 10 data routes.
+- Overview homepage now shows: Production Room last-7-days snapshot (output, RAG efficiency, tasks) + Planning Tools quick-link grid (Procurement, Performance, BOM, Report form).
+- By Employee table on /planning/performance gained Days Worked column.
+
 ## 7. Environment / deploy
 
 - `.env.local` (gitignored): `GOOGLE_SERVICE_ACCOUNT_JSON` (stringified JSON), `SHEET_ID`, `GROQ_API_KEY`, `PRODUCTION_REPORTS_SHEET_ID`, `PRODUCTION_REPORT_PASSWORD`. All must also be set in Vercel (the two PRODUCTION_* vars added 2026-07-03 — needed for the report form to write on the live site).

@@ -1,4 +1,4 @@
-import { fetchSkus } from "@/lib/sheets";
+import { fetchSkus, fetchProductionInput } from "@/lib/sheets";
 import { getCoverStatus } from "@/lib/types";
 import { getMarketMode, filterSkusByMode } from "@/lib/markets";
 import KpiCard from "@/components/KpiCard";
@@ -8,10 +8,26 @@ import Link from "next/link";
 
 export const revalidate = 0;
 
+function parseDMY(s: string): Date | null {
+  const p = s.trim().split("/");
+  if (p.length === 3) { const d = new Date(`${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`); return isNaN(d.getTime()) ? null : d; }
+  return null;
+}
+
 export default async function OverviewPage() {
-  const allSkus = await fetchSkus();
+  const [allSkus, productionInput] = await Promise.all([
+    fetchSkus(),
+    fetchProductionInput().catch(() => []),
+  ]);
   const mode = getMarketMode();
   const skus = filterSkusByMode(allSkus, mode);
+
+  // Production room snapshot — last 7 days
+  const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7); weekAgo.setHours(0,0,0,0);
+  const recent = productionInput.filter(r => { const d = parseDMY(r.date); return d !== null && d >= weekAgo; });
+  const weekOutput = recent.reduce((s, r) => s + (r.actualQty ?? 0), 0);
+  const weekPlanned = recent.reduce((s, r) => s + (r.plannedQty ?? 0), 0);
+  const weekEff = weekPlanned > 0 ? Math.round((weekOutput / weekPlanned) * 1000) / 10 : null;
 
   const totalSKUs = skus.length;
   const critical = skus.filter((s) => getCoverStatus(s.cover) === "critical");
@@ -50,6 +66,54 @@ export default async function OverviewPage() {
         <KpiCard title="Critical" value={critical.length} subtitle="Under 4 weeks cover" color="red" />
         <KpiCard title="Low Cover" value={low.length} subtitle="4–8 weeks cover" color="amber" />
         <KpiCard title="Total Inventory" value={totalInventory.toLocaleString()} subtitle="Units across all locations" color="copper" />
+      </div>
+
+      {/* Production room snapshot + quick tools */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <div className="bg-white rounded-2xl border border-[#e4ddd4] p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-serif text-lg text-charcoal">Production Room — Last 7 Days</h2>
+            <Link href="/planning/performance" className="text-xs text-copper tracking-widest uppercase hover:opacity-70 transition-opacity">Details →</Link>
+          </div>
+          {recent.length === 0 ? (
+            <p className="text-text-muted text-sm py-4">No production entries in the last 7 days.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-[10px] tracking-widest uppercase text-text-muted mb-1">Output</p>
+                <p className="text-xl font-serif font-medium text-charcoal">{weekOutput.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] tracking-widest uppercase text-text-muted mb-1">Efficiency</p>
+                <p className={`text-xl font-serif font-medium ${weekEff !== null && weekEff >= 90 ? "text-emerald-600" : weekEff !== null && weekEff >= 75 ? "text-amber-600" : "text-red-600"}`}>
+                  {weekEff !== null ? `${weekEff}%` : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] tracking-widest uppercase text-text-muted mb-1">Tasks</p>
+                <p className="text-xl font-serif font-medium text-charcoal">{recent.length}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-[#e4ddd4] p-6">
+          <h2 className="font-serif text-lg text-charcoal mb-4">Planning Tools</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { href: "/procurement", label: "Procurement Planner", desc: "Plan the next cycle" },
+              { href: "/planning/performance", label: "Production Performance", desc: "Yield & efficiency" },
+              { href: "/bom", label: "Bill of Materials", desc: "Recipes & where-used" },
+              { href: "/planning/report", label: "Production Report", desc: "Supervisor form" },
+            ].map(t => (
+              <Link key={t.href} href={t.href}
+                className="rounded-xl border border-[#e4ddd4] px-4 py-3 hover:border-copper hover:bg-cream transition-colors">
+                <p className="text-sm font-medium text-charcoal">{t.label}</p>
+                <p className="text-xs text-text-muted mt-0.5">{t.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-[#e4ddd4] p-7 mb-8">
