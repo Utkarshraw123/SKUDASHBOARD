@@ -22,7 +22,8 @@ async function getSheets() {
   const creds = JSON.parse(credJson);
   const auth = new google.auth.GoogleAuth({
     credentials: creds,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+    // read+write: existing fetchers only read; production-report append needs write
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
   return google.sheets({ version: "v4", auth });
 }
@@ -348,3 +349,55 @@ export const fetchAncillaryBom = cache(async (): Promise<BomSheet> => {
   });
   return parseBomMatrix((res.data.values ?? []) as string[][], "ancillary");
 });
+
+// Look up a bulk (or any part) description from the Current Inventory tab.
+export async function fetchPartDescription(partNumber: string): Promise<string> {
+  const inv = await fetchCurrentInventory();
+  const hit = inv.find(r => r.partNumber === partNumber);
+  return hit?.description ?? "";
+}
+
+const REPORTS_TAB = "Reports";
+
+// Append one production report row to the dedicated Production Reports sheet.
+// Bootstraps the header row on first write.
+export async function appendProductionReport(
+  headers: string[],
+  row: (string | number)[],
+): Promise<void> {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) throw new Error("PRODUCTION_REPORTS_SHEET_ID env var missing");
+  const sheets = await getSheets();
+
+  // ensure the Reports tab exists
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
+  const hasTab = (meta.data.sheets ?? []).some(s => s.properties?.title === REPORTS_TAB);
+  if (!hasTab) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: REPORTS_TAB } } }] },
+    });
+  }
+
+  // ensure header row exists
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: `${REPORTS_TAB}!A1:A1`,
+  });
+  if (!existing.data.values || existing.data.values.length === 0) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `${REPORTS_TAB}!A1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [headers] },
+    });
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: `${REPORTS_TAB}!A1`,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [row] },
+  });
+}
