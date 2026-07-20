@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { SkuRow, ProductionRow, PlanningRow, BulkPoRow, PackingRow, BomSheet } from "./types";
 
 function cleanNum(s: string): number | null {
@@ -28,17 +29,35 @@ async function getSheets() {
   return google.sheets({ version: "v4", auth });
 }
 
-export const fetchSkus = cache(async (): Promise<SkuRow[]> => {
+// Short-TTL cache of raw sheet values (serialisable string[][]). Parsing stays
+// OUTSIDE the cache so BOM Maps etc. are rebuilt per request. Cuts Sheets API
+// reads dramatically (the app hits the per-minute read quota otherwise) while
+// keeping data fresh to ~2 min (UI already says "refreshes every 5 min").
+const SHEET_CACHE_TTL = 120; // seconds
+
+async function readValues(spreadsheetId: string, range: string, unformatted: boolean): Promise<string[][]> {
   const sheets = await getSheets();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range,
+    ...(unformatted ? { valueRenderOption: "UNFORMATTED_VALUE" as const } : {}),
+  });
+  return (res.data.values ?? []) as string[][];
+}
+
+function cachedValues(spreadsheetId: string, range: string, unformatted = false): Promise<string[][]> {
+  return unstable_cache(
+    () => readValues(spreadsheetId, range, unformatted),
+    ["sheet-values", spreadsheetId, range, unformatted ? "u" : "f"],
+    { revalidate: SHEET_CACHE_TTL, tags: ["sheets"] },
+  )();
+}
+
+export const fetchSkus = cache(async (): Promise<SkuRow[]> => {
   const sheetId = process.env.SHEET_ID;
   if (!sheetId) throw new Error("SHEET_ID env var missing");
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: "ALL SKU DASHBOARD!A1:AX200",
-  });
-
-  const rows = res.data.values ?? [];
+  const rows = await cachedValues(sheetId, "ALL SKU DASHBOARD!A1:AX200");
   // Skip first 2 header rows
   const dataRows = rows.slice(2);
 
@@ -112,16 +131,10 @@ function urgency(dueDateStr: string): PackingRow["urgency"] {
 }
 
 export const fetchProduction = cache(async (): Promise<ProductionRow[]> => {
-  const sheets = await getSheets();
   const sheetId = process.env.SHEET_ID;
   if (!sheetId) throw new Error("SHEET_ID env var missing");
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: "New Production Master!A1:W430",
-  });
-
-  const rows = res.data.values ?? [];
+  const rows = await cachedValues(sheetId, "New Production Master!A1:W430");
   return rows
     .slice(3)
     .filter((r) => r[3] && r[3].trim() !== "")
@@ -156,16 +169,10 @@ export const fetchProduction = cache(async (): Promise<ProductionRow[]> => {
 });
 
 export const fetchWNPPlanning = cache(async (): Promise<PlanningRow[]> => {
-  const sheets = await getSheets();
   const sheetId = process.env.SHEET_ID;
   if (!sheetId) throw new Error("SHEET_ID env var missing");
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: "WNP PLANNING!A1:V1048",
-  });
-
-  const rows = res.data.values ?? [];
+  const rows = await cachedValues(sheetId, "WNP PLANNING!A1:V1048");
   return rows
     .slice(3)
     .filter((r) => r[7] && r[7].trim() !== "")
@@ -204,16 +211,10 @@ export const fetchWNPPlanning = cache(async (): Promise<PlanningRow[]> => {
 });
 
 export const fetchBulkOpenPOs = cache(async (): Promise<BulkPoRow[]> => {
-  const sheets = await getSheets();
   const sheetId = process.env.SHEET_ID;
   if (!sheetId) throw new Error("SHEET_ID env var missing");
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: "Open Purchase Orders!A1:L240",
-  });
-
-  const rows = res.data.values ?? [];
+  const rows = await cachedValues(sheetId, "Open Purchase Orders!A1:L240");
   return rows
     .slice(1)
     .filter((r) => r[3] && r[3].trim() !== "") // must have PO
@@ -231,16 +232,10 @@ export const fetchBulkOpenPOs = cache(async (): Promise<BulkPoRow[]> => {
 });
 
 export const fetchPackingSchedule = cache(async (): Promise<PackingRow[]> => {
-  const sheets = await getSheets();
   const sheetId = process.env.SHEET_ID;
   if (!sheetId) throw new Error("SHEET_ID env var missing");
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: "Packing Schedule!A1:H470",
-  });
-
-  const rows = res.data.values ?? [];
+  const rows = await cachedValues(sheetId, "Packing Schedule!A1:H470");
   return rows
     .slice(1)
     .filter((r) => r[0] && r[0].trim() !== "") // must have part number
@@ -269,12 +264,7 @@ export interface InventoryRow {
 }
 
 export const fetchCurrentInventory = cache(async (): Promise<InventoryRow[]> => {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: STOCK_SHEET_ID,
-    range: "Current Inventory!A1:F5000",
-  });
-  const rows = (res.data.values ?? []) as string[][];
+  const rows = await cachedValues(STOCK_SHEET_ID, "Current Inventory!A1:F5000");
   // Find the header row (contains "Part Number"), data follows
   const headerIdx = rows.findIndex(r => (r[2] ?? "").trim() === "Part Number");
   return rows
@@ -331,23 +321,13 @@ function parseBomMatrix(rows: string[][], type: "rm" | "ancillary"): BomSheet {
 }
 
 export const fetchRmBom = cache(async (): Promise<BomSheet> => {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: BOM_SHEET_ID,
-    range: "BOM matrix RM!A1:BZ800",
-    valueRenderOption: "UNFORMATTED_VALUE",
-  });
-  return parseBomMatrix((res.data.values ?? []) as string[][], "rm");
+  const rows = await cachedValues(BOM_SHEET_ID, "BOM matrix RM!A1:BZ800", true);
+  return parseBomMatrix(rows, "rm");
 });
 
 export const fetchAncillaryBom = cache(async (): Promise<BomSheet> => {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: BOM_SHEET_ID,
-    range: "BOM Ancillaries!A1:EZ800",
-    valueRenderOption: "UNFORMATTED_VALUE",
-  });
-  return parseBomMatrix((res.data.values ?? []) as string[][], "ancillary");
+  const rows = await cachedValues(BOM_SHEET_ID, "BOM Ancillaries!A1:EZ800", true);
+  return parseBomMatrix(rows, "ancillary");
 });
 
 const PRODUCTION_INPUT_SHEET_ID = "1NnS9fg1mFxnWljbjUUXG9701mUPbvrVyiZ2Lbo2Hplw";
@@ -369,12 +349,7 @@ export interface ProductionInputRow {
 }
 
 export const fetchProductionInput = cache(async (): Promise<ProductionInputRow[]> => {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: PRODUCTION_INPUT_SHEET_ID,
-    range: "INPUT!A1:N1200",
-  });
-  const rows = (res.data.values ?? []) as string[][];
+  const rows = await cachedValues(PRODUCTION_INPUT_SHEET_ID, "INPUT!A1:N1200");
   return rows
     .slice(1)
     .filter(r => r[0] && String(r[0]).trim() !== "" && r[4] && String(r[4]).trim() !== "")
@@ -408,13 +383,8 @@ export interface ProductionReportRecord {
 export const fetchProductionReports = cache(async (): Promise<ProductionReportRecord[]> => {
   const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
   if (!sheetId) return [];
-  const sheets = await getSheets();
   try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: "Reports!A2:AC2000",
-    });
-    const rows = (res.data.values ?? []) as string[][];
+    const rows = await cachedValues(sheetId, "Reports!A2:AC2000");
     return rows
       // Work Order present AND Made populated → the report's first/primary row.
       // Secondary per-bulk rows leave Made blank, so this keeps one record per report.
