@@ -129,6 +129,23 @@ Supervisor-facing form for internal production reporting → appends to a dedica
 - Original single-row write tested 2026-07-03. **2026-07-20 rework: form render/hydration + repeatable groups verified live; wastage math + one-row-per-bulk mapping verified via offline unit test. Live sheet-append NOT yet re-tested end-to-end (first real submission will also relabel/extend the header row — safe/non-destructive).**
 - **Pending:** Slack integration (later); consider admin auth vs shared pw. (Multi-row append verified live 2026-07-20; blended-wastage switched to quantity-weighted 2026-07-20.)
 
+## 6e. Production Readiness — MRP-lite (deployed 2026-07-20)
+
+Flags any WNP work order in the next 10 days whose components won't be available in
+time, so production is never halted. Design spec: `docs/superpowers/specs/2026-07-20-production-readiness-mrp.md`.
+
+- **Route `/planning/readiness`** ("Production Readiness", Production sidebar group) + red/amber banner and a tile on the Overview homepage.
+- **`lib/readiness.ts`** — pure `computeReadiness()`. For each WNP WO (status≠complete, `productCode` starts with 3, `netQty = quantity−quantityProduced > 0`, planned date in [today, today+10d]):
+  - **Date** from `deriveWoDate(plannedWeek, plannedDays)` — week-commencing + first weekday named (earliest wins for fuzzy "Thu - Fri"); falls back to week-commencing.
+  - **Requirements:** bulk caps = `netQty × fill` (row→SKU fallback for fill & bulkCode); ancillaries = explode `netQty` through Ancillary BOM, filtered by the procurement subset (jar/lid/label/box/pouch; scoops/shippers/unmatched skipped).
+  - **Supply:** on-hand at **WNP+WNC only** (`PACKING_WAREHOUSES`), plus inbound Open POs + open New Production Master rows due ≤ run date (bulk PO qty ×1000), de-duped.
+  - **Time-phased netting:** two running balances per component (stockOnly / withInbound); green = stock covers, amber = only inbound covers (names the PO), red = short (shortfall shown). Shortages cascade to later WOs sharing a component. WO status = worst component.
+- **`components/ReadinessView.tsx`** — KPI row (total/ready/at-risk/short), RAG-sorted WO cards, expandable component trail (need/on-hand/inbound/shortfall), status filters, CSV export (client-side).
+- Engine verified via offline unit test (netting, cascade, amber-inbound, ancillary explosion, warehouse filter, fill fallback); page verified live (7 WOs, 2 at-risk, 5 short on real data 2026-07-20).
+- **Calibrate after first use:** the `{WNP, WNC}` packing-warehouse set drives bulk "on hand" — live data shows bulk on-hand there is near-zero (bulk arrives just before packing), so most bulk flags rely on inbound POs. If real bulk sits at a TPM/transit and isn't captured as an inbound PO/WO, it will over-flag "short". Constant is at top of `lib/readiness.ts`. Overdue (past-dated incomplete) WOs currently excluded.
+- **Phase 2 (later):** daily Resend email digest of red/amber WOs (flight-engine cron pattern).
+- **Perf note:** page + Overview banner each fetch ~6 Sheets ranges with `revalidate=0`; heavy reloading can trip the Sheets per-minute read quota (banner degrades gracefully to hidden).
+
 ## 6c. Production Performance section (deployed 2026-07-03)
 
 Analytics of the production room from a shared production-tracking sheet.
