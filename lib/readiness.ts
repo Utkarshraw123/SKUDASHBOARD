@@ -8,6 +8,7 @@ import type { InventoryRow } from "./sheets";
 // ---- Config ----------------------------------------------------------------
 
 const PACKING_WAREHOUSES = ["WNP", "WNC"]; // components must be at the packing site
+const RM_WAREHOUSES = ["WNP", "WNC"];      // usable raw-material stock
 const DEFAULT_HORIZON_DAYS = 10;
 
 // Bulk (1-code) quantities are recorded in THOUSANDS of capsules across the DB
@@ -83,6 +84,28 @@ export interface WoReadiness {
   components: ComponentCheck[];
 }
 
+export interface RmCheck {
+  code: string;
+  name: string;
+  needKg: number;
+  onHandKg: number;
+  inboundKg: number;
+  shortfallKg: number;
+  status: ComponentStatus;
+}
+
+export type BulkMakeStatus = "makeable" | "blocked";
+
+export interface BulkMakeRow {
+  bulkCode: string;
+  name: string;
+  shortfallCaps: number;   // capsules that must be MADE to cover the window
+  bulkWoPlanned: boolean;  // an open bulk WO already exists for this 1-code
+  bulkWoRefs: string[];
+  makeStatus: BulkMakeStatus; // makeable = RMs available; blocked = an RM is short too
+  rms: RmCheck[];
+}
+
 export interface ReadinessResult {
   horizonDays: number;
   generatedAtISO: string;
@@ -91,6 +114,7 @@ export interface ReadinessResult {
   summary: { total: number; ready: number; atRisk: number; short: number };
   workOrders: WoReadiness[];
   excludedNon3: number;
+  bulkMake?: BulkMakeRow[]; // multi-level: for bulks short over the window, can we make more?
 }
 
 // ---- Helpers ---------------------------------------------------------------
@@ -162,10 +186,11 @@ export function computeReadiness(inputs: {
   production: ProductionRow[]; // New Production Master (inbound)
   bulkPOs: BulkPoRow[];        // Open Purchase Orders (inbound)
   ancBom: BomSheet;
+  rmBom?: BomSheet;            // RM BOM — enables multi-level bulk make-readiness
   today?: Date;
   horizonDays?: number;
 }): ReadinessResult {
-  const { planning, skus, inventory, production, bulkPOs, ancBom } = inputs;
+  const { planning, skus, inventory, production, bulkPOs, ancBom, rmBom } = inputs;
   const horizonDays = inputs.horizonDays ?? DEFAULT_HORIZON_DAYS;
   const today = inputs.today ? new Date(inputs.today) : new Date();
   today.setHours(0, 0, 0, 0);
@@ -305,6 +330,49 @@ export function computeReadiness(inputs: {
     });
   }
 
+  // --- 5. Multi-level: bulk make-readiness -----------------------------------
+  // For each bulk short over the whole window (total need > stock + inbound),
+  // can we MAKE the shortfall? Explode it through the RM BOM and check RMs.
+  let bulkMake: BulkMakeRow[] | undefined;
+  if (rmBom) {
+    const needByBulk = new Map<string, number>();
+    for (const wo of scoped) {
+      if (wo.bulkCode && wo.fill && wo.fill > 0) {
+        needByBulk.set(wo.bulkCode, (needByBulk.get(wo.bulkCode) ?? 0) + wo.netQty * wo.fill);
+      }
+    }
+    bulkMake = [];
+    needByBulk.forEach((totalNeed, code) => {
+      const onHand = sumBulkStock(inventory, code, PACKING_WAREHOUSES);
+      const inbound = inboundFor(code, true, to).reduce((s, r) => s + r.qty, 0);
+      const shortfallCaps = Math.max(0, totalNeed - onHand - inbound);
+      if (shortfallCaps <= 0) return; // enough bulk supply for the window — nothing to make
+
+      const woRefs = Array.from(new Set(
+        production.filter(p => p.partNumber === code && p.status !== "complete").map(p => p.order).filter(Boolean),
+      ));
+
+      const rms: RmCheck[] = [];
+      const product = rmBom.products.find(p => p.code === code);
+      if (product) {
+        for (const comp of product.components) {
+          const needKg = (shortfallCaps / 1000) * comp.qty; // RM BOM qty = kg per 1,000 caps
+          if (needKg <= 0) continue;
+          const onHandKg = sumStock(inventory, comp.code, RM_WAREHOUSES);
+          const inboundKg = inboundFor(comp.code, false, to).reduce((s, r) => s + r.qty, 0);
+          const shortfallKg = Math.max(0, needKg - onHandKg - inboundKg);
+          const status: ComponentStatus = onHandKg >= needKg ? "ok" : (onHandKg + inboundKg >= needKg ? "at_risk" : "short");
+          rms.push({ code: comp.code, name: comp.name, needKg, onHandKg, inboundKg, shortfallKg, status });
+        }
+      }
+      const makeStatus: BulkMakeStatus = rms.some(r => r.status === "short") ? "blocked" : "makeable";
+      bulkMake!.push({ bulkCode: code, name: bulkName(inventory, code), shortfallCaps, bulkWoPlanned: woRefs.length > 0, bulkWoRefs: woRefs, makeStatus, rms });
+    });
+    bulkMake.sort((a, b) =>
+      (a.makeStatus === "blocked" ? 0 : 1) - (b.makeStatus === "blocked" ? 0 : 1) || b.shortfallCaps - a.shortfallCaps,
+    );
+  }
+
   const summary = {
     total: workOrders.length,
     ready: workOrders.filter(w => w.status === "ready").length,
@@ -320,6 +388,7 @@ export function computeReadiness(inputs: {
     summary,
     workOrders,
     excludedNon3,
+    bulkMake,
   };
 }
 

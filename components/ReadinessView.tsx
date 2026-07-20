@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { ReadinessResult, WoReadiness, ComponentCheck, WoStatus, ComponentStatus } from "@/lib/readiness";
+import type { ReadinessResult, WoReadiness, ComponentCheck, WoStatus, ComponentStatus, BulkMakeRow } from "@/lib/readiness";
 
 const WO_BADGE: Record<WoStatus, { label: string; cls: string }> = {
   ready: { label: "Ready", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
@@ -126,6 +126,74 @@ function WoCard({ wo }: { wo: WoReadiness }) {
   );
 }
 
+const fmtKg = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+function BulkMakeCard({ b }: { b: BulkMakeRow }) {
+  const [open, setOpen] = useState(b.makeStatus === "blocked");
+  const badge = b.makeStatus === "blocked"
+    ? { label: "Blocked", cls: "bg-red-50 text-red-700 border-red-200" }
+    : { label: "Makeable", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  return (
+    <div className="bg-white rounded-2xl border border-[#e4ddd4] overflow-hidden">
+      <button type="button" onClick={() => setOpen(o => !o)} className="w-full text-left px-5 py-4 hover:bg-cream/50 transition-colors">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <span className={`text-[10px] tracking-widest uppercase px-2 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
+              <span className="font-mono text-xs text-copper">{b.bulkCode}</span>
+              <span className="text-charcoal text-sm font-medium truncate">{b.name}</span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
+              <span>Shortfall <strong className="text-charcoal">{fmt(b.shortfallCaps)}</strong> caps to make</span>
+              <span className={b.bulkWoPlanned ? "text-emerald-600" : "text-amber-600"}>
+                {b.bulkWoPlanned ? `Bulk WO planned (${b.bulkWoRefs.join(", ")})` : "No bulk WO planned"}
+              </span>
+              {b.makeStatus === "blocked" && <span className="text-red-600">RM short</span>}
+            </div>
+          </div>
+          <span className="text-text-muted text-xs shrink-0">{open ? "▲" : "▼"}</span>
+        </div>
+      </button>
+      {open && (
+        <div className="px-5 pb-4 border-t border-[#e4ddd4]/60">
+          {b.rms.length === 0 ? (
+            <p className="text-xs text-text-muted py-3">No raw-material BOM found for this bulk.</p>
+          ) : (
+            <table className="w-full text-sm mt-2">
+              <thead>
+                <tr className="text-left text-[10px] tracking-widest uppercase text-text-muted">
+                  <th className="py-2 pr-3 font-medium">Raw material</th>
+                  <th className="py-2 pr-3 font-medium">Description</th>
+                  <th className="py-2 pr-3 font-medium text-right">Need (kg)</th>
+                  <th className="py-2 pr-3 font-medium text-right">On hand</th>
+                  <th className="py-2 pr-3 font-medium text-right">Inbound</th>
+                  <th className="py-2 font-medium text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {b.rms.map((r, i) => (
+                  <tr key={`${r.code}-${i}`} className="border-b border-[#e4ddd4]/50 last:border-0">
+                    <td className="py-2 pr-3"><span className={`inline-block w-2 h-2 rounded-full mr-2 align-middle ${COMP_DOT[r.status]}`} /><span className="font-mono text-xs text-copper">{r.code}</span></td>
+                    <td className="py-2 pr-3 text-charcoal">{r.name || "—"}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{fmtKg(r.needKg)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-text-muted">{fmtKg(r.onHandKg)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-text-muted">{r.inboundKg > 0 ? fmtKg(r.inboundKg) : "—"}</td>
+                    <td className="py-2 text-right">
+                      {r.status === "short" ? <span className="text-red-600 font-medium tabular-nums">−{fmtKg(r.shortfallKg)}</span>
+                        : r.status === "at_risk" ? <span className="text-amber-600 text-xs">inbound</span>
+                        : <span className="text-emerald-600 text-xs">OK</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReadinessView({ result }: { result: ReadinessResult }) {
   const [filter, setFilter] = useState<"all" | WoStatus>("all");
 
@@ -205,6 +273,20 @@ export default function ReadinessView({ result }: { result: ReadinessResult }) {
       ) : (
         <div className="space-y-3">
           {shown.map(wo => <WoCard key={wo.workOrder} wo={wo} />)}
+        </div>
+      )}
+
+      {result.bulkMake && result.bulkMake.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div>
+            <h2 className="font-serif text-lg text-charcoal">Bulk make-readiness</h2>
+            <p className="text-xs text-text-muted mt-1">
+              Bulks short over the window — can we make the shortfall? Exploded through the RM BOM.
+              <span className="text-red-600"> Blocked</span> = a raw material is also short (needs procurement);
+              <span className="text-emerald-600"> Makeable</span> = raw materials available, just needs a bulk work order.
+            </p>
+          </div>
+          {result.bulkMake.map(b => <BulkMakeCard key={b.bulkCode} b={b} />)}
         </div>
       )}
 

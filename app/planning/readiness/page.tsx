@@ -1,4 +1,4 @@
-import { fetchWNPPlanning, fetchSkus, fetchCurrentInventory, fetchProduction, fetchBulkOpenPOs, fetchAncillaryBom } from "@/lib/sheets";
+import { fetchWNPPlanning, fetchSkus, fetchCurrentInventory, fetchProduction, fetchBulkOpenPOs, fetchAncillaryBom, fetchRmBom } from "@/lib/sheets";
 import { computeReadiness } from "@/lib/readiness";
 import ReadinessView from "@/components/ReadinessView";
 
@@ -11,16 +11,17 @@ export default async function ReadinessPage({
 }) {
   const horizonDays = Math.min(60, Math.max(1, Number(searchParams.days) || 10));
 
-  const [planning, skus, inventory, production, bulkPOs, ancBom] = await Promise.all([
+  const [planning, skus, inventory, production, bulkPOs, ancBom, rmBom] = await Promise.all([
     fetchWNPPlanning(),
     fetchSkus(),
     fetchCurrentInventory(),
     fetchProduction(),
     fetchBulkOpenPOs(),
     fetchAncillaryBom(),
+    fetchRmBom(),
   ]);
 
-  const result = computeReadiness({ planning, skus, inventory, production, bulkPOs, ancBom, horizonDays });
+  const result = computeReadiness({ planning, skus, inventory, production, bulkPOs, ancBom, rmBom, horizonDays });
 
   return (
     <div className="max-w-5xl">
