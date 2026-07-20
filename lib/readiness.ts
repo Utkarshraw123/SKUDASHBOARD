@@ -9,7 +9,17 @@ import type { InventoryRow } from "./sheets";
 
 const PACKING_WAREHOUSES = ["WNP", "WNC"]; // components must be at the packing site
 const DEFAULT_HORIZON_DAYS = 10;
-const BULK_PO_UNIT = 1000; // Open bulk POs are in units of 1,000 capsules
+
+// Bulk (1-code) quantities are recorded in THOUSANDS of capsules across the DB
+// (stock AND POs): e.g. 487 means 487,000. Some rows are already written in full
+// (e.g. 487000). Values at/above this threshold are treated as already-actual;
+// anything below is multiplied ×1000. The live data has a clean gap — largest
+// "thousands" value ≈ 3,360, smallest already-actual ≈ 748,755.
+const BULK_ACTUAL_THRESHOLD = 100000;
+function bulkCaps(v: number): number {
+  if (!v) return 0;
+  return Math.abs(v) < BULK_ACTUAL_THRESHOLD ? v * 1000 : v;
+}
 
 // Only these ancillary types are checked (matches procurement); scoops/shippers/
 // unmatched are skipped.
@@ -122,6 +132,14 @@ function sumStock(inv: InventoryRow[], part: string, warehouses: string[]): numb
     .reduce((s, r) => s + r.balance, 0);
 }
 
+// Bulk stock: convert each line thousands→caps before summing (handles a mix of
+// thousands-notation and already-actual lines correctly).
+function sumBulkStock(inv: InventoryRow[], part: string, warehouses: string[]): number {
+  return inv
+    .filter(r => r.partNumber === part && warehouses.includes(r.warehouse))
+    .reduce((s, r) => s + bulkCaps(r.balance), 0);
+}
+
 // ---- Component supply state (one per component code) ------------------------
 
 interface CompState {
@@ -157,14 +175,15 @@ export function computeReadiness(inputs: {
   const skuByCode = new Map(skus.map(s => [s.skuCode, s]));
 
   // Inbound receipts for a part, due on/before `by` — Open POs + open production rows.
+  // Bulk POs are also recorded in thousands → normalise with bulkCaps().
+  const conv = (isBulk: boolean, v: number) => (isBulk ? bulkCaps(v) : v);
   const inboundFor = (part: string, isBulk: boolean, by: Date): ReadinessPoRef[] => {
-    const mult = isBulk ? BULK_PO_UNIT : 1;
     const fromPO = bulkPOs
       .filter(p => p.partNumber === part && p.orderQuantity !== null)
-      .map(p => ({ po: p.order, qty: p.orderQuantity! * mult, dueDate: p.dueDate }));
+      .map(p => ({ po: p.order, qty: conv(isBulk, p.orderQuantity!), dueDate: p.dueDate }));
     const fromProd = production
       .filter(p => p.partNumber === part && p.status !== "complete" && p.quantity !== null)
-      .map(p => ({ po: p.order, qty: ((p.quantity ?? 0) - (p.received ?? 0)) * mult, dueDate: p.dueDate }))
+      .map(p => ({ po: p.order, qty: conv(isBulk, (p.quantity ?? 0) - (p.received ?? 0)), dueDate: p.dueDate }))
       .filter(p => p.qty > 0);
     const seen = new Set<string>();
     const all: ReadinessPoRef[] = [];
@@ -210,7 +229,9 @@ export function computeReadiness(inputs: {
   const getState = (code: string, name: string, kind: "bulk" | "ancillary"): CompState => {
     let st = states.get(code);
     if (!st) {
-      const onHand = sumStock(inventory, code, PACKING_WAREHOUSES);
+      const onHand = kind === "bulk"
+        ? sumBulkStock(inventory, code, PACKING_WAREHOUSES)
+        : sumStock(inventory, code, PACKING_WAREHOUSES);
       // gather all inbound over the whole horizon (due <= to); fold in by date as WOs advance
       const receipts = inboundFor(code, kind === "bulk", to)
         .slice()
