@@ -114,13 +114,20 @@ User's manual process, now automated: week-on-week cover sheet + current stock +
 Supervisor-facing form for internal production reporting → appends to a dedicated sheet for month-end reconciliation.
 
 - **Route `/planning/report`** — shareable link + "New Production Report" button on Internal Production page. Password-gated (`12345`, env `PRODUCTION_REPORT_PASSWORD`), re-verified server-side.
-- **Pre-fill (Option A):** supervisor searches a Work Order (from WNP Planning, newest first, de-duped); auto-fills Description (fallback to SKU dashboard), SKU, product Batch/BBD, Bulk Code, Bulk Description (looked up from bulk code via Current Inventory). All editable. Manual: Bulk Batch, Bulk BBD, Used, Made, People, WO Status, per-part Waste (Capsules/Jars/Lids/Labels/Box/Pouches/Desiccants).
-- **`lib/production-report.ts`** — `computeWastage()` pure fn. Capsule % = waste/used; ancillary % = waste/(made+waste); blended = simple average of consumed parts (NOTE: one high part skews it — user may want weighted later). `REPORT_HEADERS` + `reportToRow()`.
-- **`app/api/production-report/route.ts`** — POST, verifies password, computes wastage, calls `appendProductionReport()`. Slack deferred; clean insertion point here.
-- **`appendProductionReport()` in sheets.ts** — auto-creates `Reports` tab + header row on first write, appends row. Service account scope upgraded `spreadsheets.readonly` → `spreadsheets` (read+write).
-- **Target sheet:** `PRODUCTION_REPORTS_SHEET_ID` = `1WliT7s1RWt6wfaC1Wg4d9AaubhA6zFvTWOeKN3OoRzc` (shared with service account as Editor). Tab `Reports`, 29 columns.
-- End-to-end write tested & verified 2026-07-03.
-- **Pending:** Slack integration (later); blended-wastage formula may switch to weighted; consider gating whole thing behind admin auth instead of shared pw.
+- **Pre-fill (Option A):** supervisor searches a Work Order (from WNP Planning, newest first, de-duped); auto-fills Description (fallback to SKU dashboard), SKU, first product Batch/BBD, first Bulk Code + Bulk Description (looked up from bulk code via Current Inventory). All editable.
+- **Multi-batch / multi-bulk / disposal / comments (added 2026-07-20):**
+  - **Product Type** select — Jars / Refills / Daily Essentials / Powders (`PRODUCT_TYPES` in lib).
+  - **Product batches** — repeatable Batch+BBD rows ("+ Add batch", Remove when >1). Joined with `" | "` into the single Product Batch / Product BBD columns.
+  - **Bulks** — repeatable cards ("+ Add bulk", Remove when >1). Each bulk carries its own Code, Description, Batch, BBD, **Used (caps)** and **Capsules Wasted** (per-bulk, not combined — mainly for Daily Essentials with 3-4 bulks).
+  - **Disposal Number** (one ERP disposal ref per report) + **Production Comments** (textarea).
+  - Capsule waste is now PER BULK; the Waste card holds only ancillary parts (Jars/Lids/Labels/Box/Pouches/Desiccants), tied to `made`.
+- **`lib/production-report.ts`** — `computeWastage()` pure fn: per-bulk capsule % = wasteCapsules/used; ancillary % = waste/(made+waste); blended = mean of every active part (each bulk with used>0 + each ancillary with made+waste>0). `REPORT_HEADERS` (now 34 cols) + `reportToRows()` (plural). NOTE: blended is still a simple average — user may want weighted later.
+- **`app/api/production-report/route.ts`** — POST, verifies password, parses `batches[]` / `bulks[]` / `ancWaste{}` / disposal / comments, computes wastage, calls `appendProductionReport(headers, rows)`. Slack deferred; clean insertion point here.
+- **`appendProductionReport()` in sheets.ts** — auto-creates `Reports` tab, **upserts the header row** (extends 29→34 cols non-destructively), appends **one row per bulk**. Service account scope `spreadsheets` (read+write).
+- **Sheet layout (ONE ROW PER BULK):** cols A..AC (0..28) unchanged from original 29-col layout; cols AD..AH added = Product Type, Disposal Number, Comments, Report ID, Bulk Seq ("1/3"). The FIRST bulk row of a report carries the report-level fields (joined product batches, Made, People, ancillary waste, blended %); subsequent bulk rows leave those blank so column sums don't double-count. `fetchProductionReports()` now filters rows where Made (col 11) is populated → one record per report (keeps performance-page wastage correct; Made@11 / Blended@28 indexes preserved).
+- **Target sheet:** `PRODUCTION_REPORTS_SHEET_ID` = `1WliT7s1RWt6wfaC1Wg4d9AaubhA6zFvTWOeKN3OoRzc` (shared with service account as Editor). Tab `Reports`, now 34 columns.
+- Original single-row write tested 2026-07-03. **2026-07-20 rework: form render/hydration + repeatable groups verified live; wastage math + one-row-per-bulk mapping verified via offline unit test. Live sheet-append NOT yet re-tested end-to-end (first real submission will also relabel/extend the header row — safe/non-destructive).**
+- **Pending:** live end-to-end sheet-write test of the new multi-row append; Slack integration (later); blended-wastage may switch to weighted; consider admin auth vs shared pw.
 
 ## 6c. Production Performance section (deployed 2026-07-03)
 

@@ -1,21 +1,42 @@
 // Production report types + pure wastage math (no I/O, unit-testable)
 
-export interface ProductionReportInput {
-  workOrder: string;
-  sku: string;
-  description: string;
-  productBatch: string;
-  productBBD: string;
+export type ProductType = "jars" | "refills" | "daily_essentials" | "powders";
+
+export const PRODUCT_TYPES: { value: ProductType; label: string }[] = [
+  { value: "jars", label: "Jars" },
+  { value: "refills", label: "Refills" },
+  { value: "daily_essentials", label: "Daily Essentials" },
+  { value: "powders", label: "Powders" },
+];
+
+// A finished-good batch produced on the work order.
+export interface ProductBatchEntry {
+  batch: string;
+  bbd: string;
+}
+
+// One bulk consumed to make the finished good. Daily Essentials can use 3-4.
+export interface BulkEntry {
   bulkCode: string;
   bulkDescription: string;
   bulkBatch: string;
   bulkBBD: string;
-  used: number;        // bulk capsules consumed
-  made: number;        // units produced
+  used: number;          // bulk capsules consumed FROM THIS BULK
+  wasteCapsules: number; // capsules wasted FROM THIS BULK
+}
+
+export interface ProductionReportInput {
+  workOrder: string;
+  sku: string;
+  description: string;
+  productType: string;
+  batches: ProductBatchEntry[];  // one or more finished-good batches
+  bulks: BulkEntry[];            // one or more bulks (per-bulk used + waste)
+  made: number;                 // finished units produced (report-level)
   people: number;
-  woStatus: string;    // "complete" | "partial" | ...
-  waste: {
-    capsules: number;
+  woStatus: string;             // "complete" | "partial" | ...
+  // Ancillary waste is tied to the finished units (report-level, not per bulk).
+  ancWaste: {
     jars: number;
     lids: number;
     labels: number;
@@ -23,10 +44,12 @@ export interface ProductionReportInput {
     pouches: number;
     desiccants: number;
   };
+  disposalNumber: string;       // ERP disposal reference for this WO's waste
+  comments: string;
 }
 
 export interface WastageResult {
-  capsulesPct: number;
+  bulkCapsulesPct: number[]; // aligned 1:1 with input.bulks
   jarsPct: number;
   lidsPct: number;
   labelsPct: number;
@@ -41,41 +64,46 @@ function pct(n: number): number {
 }
 
 /**
- * Capsule/bulk wastage % = capsuleWaste / used.
- * Ancillary wastage %     = partWaste / (made + partWaste).
- * Blended                 = mean of the part percentages over parts actually consumed
- *                           (used>0 for capsules, or made+waste>0 for ancillaries).
+ * Per-bulk capsule wastage % = capsuleWaste / used.
+ * Ancillary wastage %        = partWaste / (made + partWaste).
+ * Blended                    = mean of every active part percentage
+ *                              (each bulk with used>0, plus each ancillary with made+waste>0).
  * All results are percentages (e.g. 0.065 means 0.065%).
  */
 export function computeWastage(input: ProductionReportInput): WastageResult {
-  const { used, made, waste } = input;
+  const { made, bulks, ancWaste } = input;
 
-  const capsulesPct = used > 0 ? pct((waste.capsules / used) * 100) : 0;
+  const bulkCapsulesPct = bulks.map(b => (b.used > 0 ? pct((b.wasteCapsules / b.used) * 100) : 0));
 
   const anc = (w: number) => (made + w > 0 ? pct((w / (made + w)) * 100) : 0);
-  const jarsPct = anc(waste.jars);
-  const lidsPct = anc(waste.lids);
-  const labelsPct = anc(waste.labels);
-  const boxPct = anc(waste.box);
-  const pouchesPct = anc(waste.pouches);
-  const desiccantsPct = anc(waste.desiccants);
+  const jarsPct = anc(ancWaste.jars);
+  const lidsPct = anc(ancWaste.lids);
+  const labelsPct = anc(ancWaste.labels);
+  const boxPct = anc(ancWaste.box);
+  const pouchesPct = anc(ancWaste.pouches);
+  const desiccantsPct = anc(ancWaste.desiccants);
 
-  // Blended: average of the parts that were actually part of this production.
-  const parts: { pctVal: number; consumed: boolean }[] = [
-    { pctVal: capsulesPct, consumed: used > 0 },
-    { pctVal: jarsPct, consumed: made + waste.jars > 0 },
-    { pctVal: lidsPct, consumed: made + waste.lids > 0 },
-    { pctVal: labelsPct, consumed: made + waste.labels > 0 },
-    { pctVal: boxPct, consumed: made + waste.box > 0 },
-    { pctVal: pouchesPct, consumed: made + waste.pouches > 0 },
-    { pctVal: desiccantsPct, consumed: made + waste.desiccants > 0 },
+  // Blended: average of every part actually part of this production.
+  const active: number[] = [];
+  bulks.forEach((b, i) => { if (b.used > 0) active.push(bulkCapsulesPct[i]); });
+  const ancParts: { pctVal: number; waste: number }[] = [
+    { pctVal: jarsPct, waste: ancWaste.jars },
+    { pctVal: lidsPct, waste: ancWaste.lids },
+    { pctVal: labelsPct, waste: ancWaste.labels },
+    { pctVal: boxPct, waste: ancWaste.box },
+    { pctVal: pouchesPct, waste: ancWaste.pouches },
+    { pctVal: desiccantsPct, waste: ancWaste.desiccants },
   ];
-  const active = parts.filter(p => p.consumed);
-  const blendedPct = active.length > 0 ? pct(active.reduce((s, p) => s + p.pctVal, 0) / active.length) : 0;
+  ancParts.forEach(p => { if (made + p.waste > 0) active.push(p.pctVal); });
 
-  return { capsulesPct, jarsPct, lidsPct, labelsPct, boxPct, pouchesPct, desiccantsPct, blendedPct };
+  const blendedPct = active.length > 0 ? pct(active.reduce((s, v) => s + v, 0) / active.length) : 0;
+
+  return { bulkCapsulesPct, jarsPct, lidsPct, labelsPct, boxPct, pouchesPct, desiccantsPct, blendedPct };
 }
 
+// Header schema. Columns A..AC (index 0..28) are UNCHANGED from the original
+// single-row layout so existing rows and the performance read stay valid.
+// Columns AD..AH (index 29..33) are appended for the new fields.
 export const REPORT_HEADERS = [
   "Timestamp", "Work Order", "SKU", "Description",
   "Product Batch", "Product BBD", "Bulk Code", "Bulk Description", "Bulk Batch", "Bulk BBD",
@@ -83,16 +111,54 @@ export const REPORT_HEADERS = [
   "Waste Capsules", "Waste Jars", "Waste Lids", "Waste Labels", "Waste Box", "Waste Pouches", "Waste Desiccants",
   "Capsule Waste %", "Jars Waste %", "Lids Waste %", "Labels Waste %", "Box Waste %", "Pouches Waste %", "Desiccants Waste %",
   "Blended Waste %",
+  "Product Type", "Disposal Number", "Comments", "Report ID", "Bulk Seq",
 ];
 
-export function reportToRow(input: ProductionReportInput, w: WastageResult): (string | number)[] {
-  return [
-    new Date().toISOString(),
-    input.workOrder, input.sku, input.description,
-    input.productBatch, input.productBBD, input.bulkCode, input.bulkDescription, input.bulkBatch, input.bulkBBD,
-    input.used, input.made, input.people, input.woStatus,
-    input.waste.capsules, input.waste.jars, input.waste.lids, input.waste.labels, input.waste.box, input.waste.pouches, input.waste.desiccants,
-    w.capsulesPct, w.jarsPct, w.lidsPct, w.labelsPct, w.boxPct, w.pouchesPct, w.desiccantsPct,
-    w.blendedPct,
-  ];
+/**
+ * One row PER BULK. The first bulk row carries the report-level fields
+ * (product batches, made, people, ancillary waste, blended %); subsequent
+ * bulk rows leave those blank so column sums don't double-count. Every row
+ * shares the same Report ID and a "1/3"-style Bulk Seq for grouping.
+ */
+export function reportToRows(input: ProductionReportInput, w: WastageResult): (string | number)[][] {
+  const ts = new Date().toISOString();
+  const reportId = `${input.workOrder || "WO"}-${Date.now()}`;
+  const batchesJoined = input.batches.map(b => b.batch).filter(s => s.trim() !== "").join(" | ");
+  const bbdsJoined = input.batches.map(b => b.bbd).filter(s => s.trim() !== "").join(" | ");
+  const n = input.bulks.length;
+
+  return input.bulks.map((bk, i) => {
+    const first = i === 0;
+    const capPct = w.bulkCapsulesPct[i] ?? 0;
+    return [
+      ts,
+      input.workOrder, input.sku, input.description,
+      first ? batchesJoined : "", first ? bbdsJoined : "",
+      bk.bulkCode, bk.bulkDescription, bk.bulkBatch, bk.bulkBBD,
+      bk.used,                                   // Used (this bulk)
+      first ? input.made : "",                   // Made (report-level)
+      first ? input.people : "",                 // People
+      input.woStatus,                            // WO Status
+      bk.wasteCapsules,                          // Waste Capsules (this bulk)
+      first ? input.ancWaste.jars : "",
+      first ? input.ancWaste.lids : "",
+      first ? input.ancWaste.labels : "",
+      first ? input.ancWaste.box : "",
+      first ? input.ancWaste.pouches : "",
+      first ? input.ancWaste.desiccants : "",
+      capPct,                                    // Capsule Waste % (this bulk)
+      first ? w.jarsPct : "",
+      first ? w.lidsPct : "",
+      first ? w.labelsPct : "",
+      first ? w.boxPct : "",
+      first ? w.pouchesPct : "",
+      first ? w.desiccantsPct : "",
+      first ? w.blendedPct : "",                 // Blended Waste % (report-level)
+      input.productType,                         // Product Type
+      input.disposalNumber,                      // Disposal Number
+      input.comments,                            // Comments
+      reportId,                                  // Report ID
+      `${i + 1}/${n}`,                           // Bulk Seq
+    ];
+  });
 }

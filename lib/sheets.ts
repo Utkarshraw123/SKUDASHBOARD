@@ -416,7 +416,9 @@ export const fetchProductionReports = cache(async (): Promise<ProductionReportRe
     });
     const rows = (res.data.values ?? []) as string[][];
     return rows
-      .filter(r => r[1] && String(r[1]).trim() !== "")
+      // Work Order present AND Made populated → the report's first/primary row.
+      // Secondary per-bulk rows leave Made blank, so this keeps one record per report.
+      .filter(r => r[1] && String(r[1]).trim() !== "" && String(r[11] ?? "").trim() !== "")
       .map(r => ({
         timestamp: String(r[0] ?? ""),
         workOrder: String(r[1] ?? ""),
@@ -439,14 +441,16 @@ export async function fetchPartDescription(partNumber: string): Promise<string> 
 
 const REPORTS_TAB = "Reports";
 
-// Append one production report row to the dedicated Production Reports sheet.
-// Bootstraps the header row on first write.
+// Append production report rows to the dedicated Production Reports sheet.
+// A report can span multiple rows (one per bulk). Bootstraps / upgrades the
+// header row so newly-appended columns are always labelled.
 export async function appendProductionReport(
   headers: string[],
-  row: (string | number)[],
+  rows: (string | number)[][],
 ): Promise<void> {
   const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
   if (!sheetId) throw new Error("PRODUCTION_REPORTS_SHEET_ID env var missing");
+  if (rows.length === 0) return;
   const sheets = await getSheets();
 
   // ensure the Reports tab exists
@@ -459,12 +463,15 @@ export async function appendProductionReport(
     });
   }
 
-  // ensure header row exists
+  // Upsert the header row. The first 29 columns are unchanged from the original
+  // layout, so this only ever relabels identical cells and adds the new trailing
+  // columns — existing data rows keep their meaning.
   const existing = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
-    range: `${REPORTS_TAB}!A1:A1`,
+    range: `${REPORTS_TAB}!1:1`,
   });
-  if (!existing.data.values || existing.data.values.length === 0) {
+  const currentHeader = (existing.data.values?.[0] ?? []) as string[];
+  if (currentHeader.length < headers.length || headers.some((h, i) => currentHeader[i] !== h)) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
       range: `${REPORTS_TAB}!A1`,
@@ -478,6 +485,6 @@ export async function appendProductionReport(
     range: `${REPORTS_TAB}!A1`,
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
-    requestBody: { values: [row] },
+    requestBody: { values: rows },
   });
 }

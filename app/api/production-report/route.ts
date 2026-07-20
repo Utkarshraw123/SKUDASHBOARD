@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { computeWastage, reportToRow, REPORT_HEADERS, type ProductionReportInput } from "@/lib/production-report";
+import {
+  computeWastage, reportToRows, REPORT_HEADERS,
+  type ProductionReportInput, type ProductBatchEntry, type BulkEntry,
+} from "@/lib/production-report";
 import { appendProductionReport } from "@/lib/sheets";
 
 export const runtime = "nodejs";
@@ -27,37 +30,66 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Work Order is required" }, { status: 400 });
   }
 
-  const waste = (body.waste ?? {}) as Record<string, unknown>;
+  // Batches: keep only rows that carry a batch or BBD; always keep at least one.
+  const rawBatches = Array.isArray(body.batches) ? body.batches : [];
+  const batches: ProductBatchEntry[] = rawBatches
+    .map((b): ProductBatchEntry => {
+      const o = (b ?? {}) as Record<string, unknown>;
+      return { batch: String(o.batch ?? ""), bbd: String(o.bbd ?? "") };
+    })
+    .filter(b => b.batch.trim() !== "" || b.bbd.trim() !== "");
+  if (batches.length === 0) batches.push({ batch: "", bbd: "" });
+
+  // Bulks: keep rows that carry any bulk detail; require at least one.
+  const rawBulks = Array.isArray(body.bulks) ? body.bulks : [];
+  const bulks: BulkEntry[] = rawBulks
+    .map((b): BulkEntry => {
+      const o = (b ?? {}) as Record<string, unknown>;
+      return {
+        bulkCode: String(o.bulkCode ?? ""),
+        bulkDescription: String(o.bulkDescription ?? ""),
+        bulkBatch: String(o.bulkBatch ?? ""),
+        bulkBBD: String(o.bulkBBD ?? ""),
+        used: num(o.used),
+        wasteCapsules: num(o.wasteCapsules),
+      };
+    })
+    .filter(b =>
+      b.bulkCode.trim() !== "" || b.bulkDescription.trim() !== "" ||
+      b.bulkBatch.trim() !== "" || b.used > 0 || b.wasteCapsules > 0
+    );
+  if (bulks.length === 0) {
+    return NextResponse.json({ error: "At least one bulk is required" }, { status: 400 });
+  }
+
+  const anc = (body.ancWaste ?? {}) as Record<string, unknown>;
   const input: ProductionReportInput = {
     workOrder: String(body.workOrder ?? ""),
     sku: String(body.sku ?? ""),
     description: String(body.description ?? ""),
-    productBatch: String(body.productBatch ?? ""),
-    productBBD: String(body.productBBD ?? ""),
-    bulkCode: String(body.bulkCode ?? ""),
-    bulkDescription: String(body.bulkDescription ?? ""),
-    bulkBatch: String(body.bulkBatch ?? ""),
-    bulkBBD: String(body.bulkBBD ?? ""),
-    used: num(body.used),
+    productType: String(body.productType ?? ""),
+    batches,
+    bulks,
     made: num(body.made),
     people: num(body.people),
     woStatus: String(body.woStatus ?? ""),
-    waste: {
-      capsules: num(waste.capsules),
-      jars: num(waste.jars),
-      lids: num(waste.lids),
-      labels: num(waste.labels),
-      box: num(waste.box),
-      pouches: num(waste.pouches),
-      desiccants: num(waste.desiccants),
+    ancWaste: {
+      jars: num(anc.jars),
+      lids: num(anc.lids),
+      labels: num(anc.labels),
+      box: num(anc.box),
+      pouches: num(anc.pouches),
+      desiccants: num(anc.desiccants),
     },
+    disposalNumber: String(body.disposalNumber ?? ""),
+    comments: String(body.comments ?? ""),
   };
 
   try {
     const wastage = computeWastage(input);
-    const row = reportToRow(input, wastage);
-    await appendProductionReport(REPORT_HEADERS, row);
-    return NextResponse.json({ ok: true, wastage });
+    const rows = reportToRows(input, wastage);
+    await appendProductionReport(REPORT_HEADERS, rows);
+    return NextResponse.json({ ok: true, wastage, rowsWritten: rows.length });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to save report";
     return NextResponse.json({ error: msg }, { status: 500 });
