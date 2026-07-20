@@ -1,4 +1,5 @@
-import { fetchSkus, fetchProductionInput } from "@/lib/sheets";
+import { fetchSkus, fetchProductionInput, fetchWNPPlanning, fetchCurrentInventory, fetchProduction, fetchBulkOpenPOs, fetchAncillaryBom } from "@/lib/sheets";
+import { computeReadiness } from "@/lib/readiness";
 import { getCoverStatus } from "@/lib/types";
 import { getMarketMode, filterSkusByMode } from "@/lib/markets";
 import KpiCard from "@/components/KpiCard";
@@ -21,6 +22,18 @@ export default async function OverviewPage() {
   ]);
   const mode = getMarketMode();
   const skus = filterSkusByMode(allSkus, mode);
+
+  // Production readiness — next 10 days (resilient: never break the homepage)
+  const readiness = await (async () => {
+    try {
+      const [planning, allSku2, inventory, production, bulkPOs, ancBom] = await Promise.all([
+        fetchWNPPlanning(), fetchSkus(), fetchCurrentInventory(), fetchProduction(), fetchBulkOpenPOs(), fetchAncillaryBom(),
+      ]);
+      return computeReadiness({ planning, skus: allSku2, inventory, production, bulkPOs, ancBom, horizonDays: 10 });
+    } catch { return null; }
+  })();
+  const shortWOs = readiness?.summary.short ?? 0;
+  const atRiskWOs = readiness?.summary.atRisk ?? 0;
 
   // Production room snapshot — last 7 days
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7); weekAgo.setHours(0,0,0,0);
@@ -60,6 +73,23 @@ export default async function OverviewPage() {
           Showing: {marketNames}
         </p>
       </div>
+
+      {(shortWOs > 0 || atRiskWOs > 0) && (
+        <Link href="/planning/readiness"
+          className={`flex items-center justify-between gap-3 rounded-2xl border px-5 py-4 mb-6 transition-colors ${
+            shortWOs > 0
+              ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+              : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+          }`}>
+          <span className="text-sm">
+            {shortWOs > 0 ? "⚠ " : "◔ "}
+            {shortWOs > 0 && <><strong>{shortWOs}</strong> work order{shortWOs > 1 ? "s" : ""} in the next 10 days {shortWOs > 1 ? "are" : "is"} <strong>short on components</strong></>}
+            {shortWOs > 0 && atRiskWOs > 0 && <>, and {atRiskWOs} at risk</>}
+            {shortWOs === 0 && atRiskWOs > 0 && <><strong>{atRiskWOs}</strong> work order{atRiskWOs > 1 ? "s" : ""} in the next 10 days {atRiskWOs > 1 ? "are" : "is"} <strong>at risk</strong> (covered only by inbound POs)</>}
+          </span>
+          <span className="text-xs tracking-widest uppercase shrink-0">Review →</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
         <KpiCard title="Total SKUs" value={totalSKUs} color="default" />
@@ -101,6 +131,7 @@ export default async function OverviewPage() {
           <h2 className="font-serif text-lg text-charcoal mb-4">Planning Tools</h2>
           <div className="grid grid-cols-2 gap-3">
             {[
+              { href: "/planning/readiness", label: "Production Readiness", desc: "Next 10 days' components" },
               { href: "/procurement", label: "Procurement Planner", desc: "Plan the next cycle" },
               { href: "/planning/performance", label: "Production Performance", desc: "Yield & efficiency" },
               { href: "/bom", label: "Bill of Materials", desc: "Recipes & where-used" },
