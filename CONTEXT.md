@@ -147,6 +147,16 @@ time, so production is never halted. Design spec: `docs/superpowers/specs/2026-0
 - **Phase 2 (later):** daily Resend email digest of red/amber WOs (flight-engine cron pattern).
 - **Perf note:** page + Overview banner each fetch ~6 Sheets ranges with `revalidate=0`; heavy reloading can trip the Sheets per-minute read quota (banner degrades gracefully to hidden).
 
+## 6f. Procurement Actions — order action list (deployed 2026-07-20)
+
+First of 3 MRP features chosen after reviewing the mybizna/mrp module (which turned out to be a bare PHP/Laravel skeleton — only a feature-list README, no logic). Queue: (1) **Procurement Actions ← this**, (2) bulk make-readiness / multi-level, (3) expiry (BBD) & reorder-point alerts. Note for #3: Current Inventory has NO BBD column — expiry needs an alternative source (planning BBD / report-form bulk BBD).
+
+- **Route `/procurement/actions`** ("Procurement Actions", Formulation sidebar group) + "Order action list →" button on the Procurement Planner page. Same default cycle as the planner (+8w/+16w, `?start`/`?end`).
+- **`lib/procurement-actions.ts`** — pure `buildOrderActions(plan, bulkPOs, production)`. Flattens `computePlan()` output into purchasable lines: bulk (`capsulesToOrder`/1000 → "×1,000 caps"), RM (`orderQty` kg +8%), ancillary (`orderQty` units +buffer). Excludes FG `unitsToProduce` (that's an internal WO, not a purchase). Supplier inferred per part from the most-recent-dated PO/production `vendorName`; unknown → grouped "Supplier not on file". Grouped by supplier, CSV export = the draft PO.
+- **`components/ProcurementActionsView.tsx`** — KPI row, type filter (bulk/RM/anc), supplier-grouped tables, CSV.
+- **Pending (feature #1 part 2):** raised/received status tracker needs a persistence store (mirror `appendProductionReport` with a new tab) — deferred; v1 is read-only + CSV.
+- **Known:** heavy pages (this + Overview banner + Readiness) each read ~6-8 Sheets ranges with `revalidate=0`; rapid navigation trips the Sheets per-minute read quota → error boundary "Try again" (Overview banner degrades to hidden). Consider short-TTL caching if it bites in production.
+
 ## 6c. Production Performance section (deployed 2026-07-03)
 
 Analytics of the production room from a shared production-tracking sheet.

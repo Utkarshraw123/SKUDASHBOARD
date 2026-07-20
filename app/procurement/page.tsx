@@ -2,6 +2,7 @@ import { fetchSkus, fetchProduction, fetchWNPPlanning, fetchBulkOpenPOs, fetchPa
 import { computePlan } from "@/lib/procurement";
 import ProcurementView, { CyclePicker } from "@/components/ProcurementView";
 import { Suspense } from "react";
+import Link from "next/link";
 
 export const revalidate = 0;
 
@@ -39,7 +40,12 @@ export default async function ProcurementPage({
   return (
     <div className="max-w-7xl">
       <div className="mb-8">
-        <h1 className="font-serif text-3xl font-medium text-charcoal tracking-wide">Procurement Planner</h1>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h1 className="font-serif text-3xl font-medium text-charcoal tracking-wide">Procurement Planner</h1>
+          <Link href="/procurement/actions" className="text-xs tracking-widest uppercase text-copper border border-copper/30 rounded-full px-3.5 py-1.5 hover:bg-copper hover:text-white transition-colors">
+            Order action list →
+          </Link>
+        </div>
         <p className="text-text-muted text-sm mt-2 tracking-wide">
           Cycle planning — finished goods → bulk → raw materials → ancillaries, netted against stock, committed usage and open POs
         </p>
