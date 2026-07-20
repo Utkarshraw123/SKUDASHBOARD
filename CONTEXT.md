@@ -158,6 +158,15 @@ First of 3 MRP features chosen after reviewing the mybizna/mrp module (which tur
 - **Pending (feature #1 part 2):** raised/received status tracker needs a persistence store (mirror `appendProductionReport` with a new tab) — deferred; v1 is read-only + CSV.
 - **Known:** heavy pages (this + Overview banner + Readiness) each read ~6-8 Sheets ranges with `revalidate=0`; rapid navigation trips the Sheets per-minute read quota → error boundary "Try again" (Overview banner degrades to hidden). Consider short-TTL caching if it bites in production.
 
+## 6g. Component Cover — low-stock weeks-of-cover (deployed 2026-07-20)
+
+Feature #3 of the MRP set (chosen over expiry alerts — Current Inventory has NO BBD/expiry column, verified; expiry needs a data change first). Weeks-of-cover early-warning for **components** (bulk / RM / ancillary); finished goods stay on Cover Risk.
+
+- **Route `/component-cover`** ("Component Cover", Formulation sidebar group).
+- **`lib/component-cover.ts`** — pure `computeComponentCover({skus, inventory, rmBom, ancBom})`. FG weekly demand = monthlyDemandAvg/4.33 (3-codes) → exploded through BOMs: bulk weekly caps = demand×fill (grouped by SKU.bulk, real 1-codes only — skips "N/A"/blank); RM weekly kg via RM BOM ((caps/1000)×kg); ancillary weekly units via Ancillary BOM (jar/lid/label/box/pouch subset). Weeks cover = total stock (all warehouses; bulk thousands-normalised via bulkCaps) ÷ weekly use. RAG: critical <4w, low <8w.
+- **`components/ComponentCoverView.tsx`** — KPI row, type filter, Show-OK toggle (defaults to hiding OK), CSV, RAG table sorted ascending by cover, driven-by column.
+- Engine unit-tested; verified live 2026-07-20 (178 components, 40 critical, 12 low). Note: 0-stock components with demand show 0.0w — legit signal, but some may be made-to-order / not stocked in the inventory sheet.
+
 ## 6c. Production Performance section (deployed 2026-07-03)
 
 Analytics of the production room from a shared production-tracking sheet.
