@@ -66,9 +66,12 @@ function pct(n: number): number {
 /**
  * Per-bulk capsule wastage % = capsuleWaste / used.
  * Ancillary wastage %        = partWaste / (made + partWaste).
- * Blended                    = mean of every active part percentage
- *                              (each bulk with used>0, plus each ancillary with made+waste>0).
- * All results are percentages (e.g. 0.065 means 0.065%).
+ * Blended                    = QUANTITY-WEIGHTED average of every active part %,
+ *                              each weighted by the quantity it was measured
+ *                              against (bulk → used caps; ancillary → made+waste).
+ *                              A part with tiny throughput can't skew the blend;
+ *                              algebraically this equals 100 × Σwaste ÷ Σbase over
+ *                              active parts. All results are percentages.
  */
 export function computeWastage(input: ProductionReportInput): WastageResult {
   const { made, bulks, ancWaste } = input;
@@ -83,20 +86,22 @@ export function computeWastage(input: ProductionReportInput): WastageResult {
   const pouchesPct = anc(ancWaste.pouches);
   const desiccantsPct = anc(ancWaste.desiccants);
 
-  // Blended: average of every part actually part of this production.
-  const active: number[] = [];
-  bulks.forEach((b, i) => { if (b.used > 0) active.push(bulkCapsulesPct[i]); });
-  const ancParts: { pctVal: number; waste: number }[] = [
-    { pctVal: jarsPct, waste: ancWaste.jars },
-    { pctVal: lidsPct, waste: ancWaste.lids },
-    { pctVal: labelsPct, waste: ancWaste.labels },
-    { pctVal: boxPct, waste: ancWaste.box },
-    { pctVal: pouchesPct, waste: ancWaste.pouches },
-    { pctVal: desiccantsPct, waste: ancWaste.desiccants },
-  ];
-  ancParts.forEach(p => { if (made + p.waste > 0) active.push(p.pctVal); });
+  // Blended: quantity-weighted mean of every part actually part of this production.
+  // weight = the % denominator (bulk: used; ancillary: made + waste).
+  let weightedSum = 0;
+  let totalWeight = 0;
+  const add = (pctVal: number, weight: number) => {
+    if (weight > 0) { weightedSum += pctVal * weight; totalWeight += weight; }
+  };
+  bulks.forEach((b, i) => add(bulkCapsulesPct[i], b.used));
+  add(jarsPct, made + ancWaste.jars);
+  add(lidsPct, made + ancWaste.lids);
+  add(labelsPct, made + ancWaste.labels);
+  add(boxPct, made + ancWaste.box);
+  add(pouchesPct, made + ancWaste.pouches);
+  add(desiccantsPct, made + ancWaste.desiccants);
 
-  const blendedPct = active.length > 0 ? pct(active.reduce((s, v) => s + v, 0) / active.length) : 0;
+  const blendedPct = totalWeight > 0 ? pct(weightedSum / totalWeight) : 0;
 
   return { bulkCapsulesPct, jarsPct, lidsPct, labelsPct, boxPct, pouchesPct, desiccantsPct, blendedPct };
 }
