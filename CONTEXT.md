@@ -111,7 +111,7 @@ User's manual process, now automated: week-on-week cover sheet + current stock +
 
 ## 6b. Production Reporting Form (deployed 2026-07-03)
 
-Supervisor-facing form for internal production reporting → appends to a dedicated sheet for month-end reconciliation.
+Supervisor-facing form for internal production reporting → appends to a dedicated sheet, now surfaced in-dashboard by **Internal Production Yield** (§6c).
 
 - **Route `/planning/report`** — shareable link + "New Production Report" button on Internal Production page. Password-gated (`12345`, env `PRODUCTION_REPORT_PASSWORD`), re-verified server-side.
 - **Pre-fill (Option A):** supervisor searches a Work Order (from WNP Planning, newest first, de-duped); auto-fills Description (fallback to SKU dashboard), SKU, first product Batch/BBD, first Bulk Code + Bulk Description (looked up from bulk code via Current Inventory). All editable.
@@ -129,6 +129,14 @@ Supervisor-facing form for internal production reporting → appends to a dedica
 - Original single-row write tested 2026-07-03. **2026-07-20 rework: form render/hydration + repeatable groups verified live; wastage math + one-row-per-bulk mapping verified via offline unit test. Live sheet-append NOT yet re-tested end-to-end (first real submission will also relabel/extend the header row — safe/non-destructive).**
 - **Pending:** Slack integration (later); consider admin auth vs shared pw. (Multi-row append verified live 2026-07-20; blended-wastage switched to quantity-weighted 2026-07-20.)
 
+## 6h. Internal Production Yield (deployed 2026-07-21)
+
+In-dashboard view of everything reported via the production form — replaces having to open the Reports spreadsheet. The Reports sheet is KEPT as the durable backing store (the app has no other persistence; do NOT remove the form's sheet write).
+
+- **Route `/planning/yield`** (`revalidate=60`), sidebar "Internal Production Yield". Form success message links straight to it.
+- **`fetchProductionReportRows()`** reads `Reports!A2:AH2000` (all 34 cols, every per-bulk line). **`lib/internal-yield.ts`** (pure, unit-tested against live data) groups lines by Report ID (legacy rows key on WO+timestamp; primary row = Made populated) → `computeInternalYield`: `reports` (full detail + bulks + ancillary waste), `byWorkOrder` (made-weighted blended %), `byWeek` (ISO week), `byMonth`, `byAncillary` (precise pooled % = Σwaste/Σ(made+waste) per jars/lids/labels/box/pouches/desiccants), `batches` (one row per bulk = compliance trace: product batch↔bulk batch↔BBD↔disposal#), `summary` KPIs.
+- **`components/InternalYieldView.tsx`** — count-up KPIs, Weekly/Monthly wastage trend (Recharts, gradient bars `isAnimationActive={false}`), ancillary bar chart, WO table, batch-tracking compliance table, expandable per-run line items. Three CSV exports (by-WO, batch-tracking, line-items) via `ExportCsvButton`.
+
 ## 6e. Production Readiness — MRP-lite (deployed 2026-07-20)
 
 Flags any WNP work order in the next 10 days whose components won't be available in
@@ -138,7 +146,7 @@ time, so production is never halted. Design spec: `docs/superpowers/specs/2026-0
 - **`lib/readiness.ts`** — pure `computeReadiness()`. For each WNP WO (status≠complete, `productCode` starts with 3, `netQty = quantity−quantityProduced > 0`, planned date in [today, today+10d]):
   - **Date** from `deriveWoDate(plannedWeek, plannedDays)` — week-commencing + first weekday named (earliest wins for fuzzy "Thu - Fri"); falls back to week-commencing.
   - **Requirements:** bulk caps = `netQty × fill` (row→SKU fallback for fill & bulkCode); ancillaries = explode `netQty` through Ancillary BOM, filtered by the procurement subset (jar/lid/label/box/pouch; scoops/shippers/unmatched skipped).
-  - **Supply:** on-hand at **WNP+WNC only** (`PACKING_WAREHOUSES`), plus inbound Open POs + open New Production Master rows due ≤ run date, de-duped.
+  - **Supply:** on-hand at **WNP+WNC only** (`PACKING_WAREHOUSES`), plus inbound from the **Open Purchase Orders sheet ONLY**, due ≤ run date. (2026-07-21 fix: the New Production Master is NO LONGER counted as inbound — it also lists partially-received historical orders whose remainder is not real incoming supply, which double-counted phantom inbound and masked genuine shortages, e.g. WO2605322 Menopause 2AD showed at-risk instead of short. `production` is still used only for bulk-make WO refs.)
   - **Bulk quantities are in THOUSANDS** across the DB (stock AND POs): `bulkCaps(v)` = `v < 100000 ? v*1000 : v` — small values ×1000, values already written in full (≥100k) kept as-is. Applied per stock line (`sumBulkStock`) and to inbound bulk POs. Live data has a clean gap (largest thousands ≈ 3,360; smallest actual ≈ 748,755). Added 2026-07-20 after 10000267 (stock 487 = 487,000) false-flagged short.
   - **Time-phased netting:** two running balances per component (stockOnly / withInbound); green = stock covers, amber = only inbound covers (names the PO), red = short (shortfall shown). Shortages cascade to later WOs sharing a component. WO status = worst component.
 - **`components/ReadinessView.tsx`** — KPI row (total/ready/at-risk/short), RAG-sorted WO cards, expandable component trail (need/on-hand/inbound/shortfall), status filters, CSV export (client-side).
