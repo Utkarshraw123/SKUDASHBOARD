@@ -5,6 +5,7 @@ import { getMarketMode, filterSkusByMode } from "@/lib/markets";
 import KpiCard from "@/components/KpiCard";
 import CoverBadge from "@/components/CoverBadge";
 import InventoryChart from "@/components/InventoryChart";
+import CountUp from "@/components/CountUp";
 import Link from "next/link";
 
 export const revalidate = 0;
@@ -111,17 +112,17 @@ export default async function OverviewPage() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-[10px] tracking-widest uppercase text-text-muted mb-1">Output</p>
-                <p className="text-xl font-serif font-medium text-charcoal">{weekOutput.toLocaleString()}</p>
+                <p className="text-xl font-serif font-medium text-charcoal"><CountUp value={weekOutput} /></p>
               </div>
               <div>
                 <p className="text-[10px] tracking-widest uppercase text-text-muted mb-1">Efficiency</p>
                 <p className={`text-xl font-serif font-medium ${weekEff !== null && weekEff >= 90 ? "text-emerald-600" : weekEff !== null && weekEff >= 75 ? "text-amber-600" : "text-red-600"}`}>
-                  {weekEff !== null ? `${weekEff}%` : "—"}
+                  {weekEff !== null ? <CountUp value={weekEff} decimals={1} suffix="%" /> : "—"}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] tracking-widest uppercase text-text-muted mb-1">Tasks</p>
-                <p className="text-xl font-serif font-medium text-charcoal">{recent.length}</p>
+                <p className="text-xl font-serif font-medium text-charcoal"><CountUp value={recent.length} /></p>
               </div>
             </div>
           )}

@@ -183,8 +183,8 @@ export function computeReadiness(inputs: {
   planning: PlanningRow[];
   skus: SkuRow[];
   inventory: InventoryRow[];
-  production: ProductionRow[]; // New Production Master (inbound)
-  bulkPOs: BulkPoRow[];        // Open Purchase Orders (inbound)
+  production: ProductionRow[]; // New Production Master (bulk make-readiness WO refs only — NOT inbound)
+  bulkPOs: BulkPoRow[];        // Open Purchase Orders — the sole inbound source
   ancBom: BomSheet;
   rmBom?: BomSheet;            // RM BOM — enables multi-level bulk make-readiness
   today?: Date;
@@ -199,26 +199,26 @@ export function computeReadiness(inputs: {
 
   const skuByCode = new Map(skus.map(s => [s.skuCode, s]));
 
-  // Inbound receipts for a part, due on/before `by` — Open POs + open production rows.
-  // Bulk POs are also recorded in thousands → normalise with bulkCaps().
+  // Inbound receipts for a part, due on/before `by`. Taken ONLY from the Open
+  // Purchase Orders sheet (committed incoming stock). The New Production Master is
+  // deliberately NOT used as an inbound source: it also lists historical and
+  // partially-received orders whose un-received remainder is not genuine incoming
+  // supply. Counting it inflated inbound and masked real shortages — e.g. a Feb
+  // partial on a bulk was folded into a July WO, flipping it from short→at-risk.
+  // Bulk PO quantities are recorded in thousands → normalise with bulkCaps().
   const conv = (isBulk: boolean, v: number) => (isBulk ? bulkCaps(v) : v);
   const inboundFor = (part: string, isBulk: boolean, by: Date): ReadinessPoRef[] => {
-    const fromPO = bulkPOs
-      .filter(p => p.partNumber === part && p.orderQuantity !== null)
-      .map(p => ({ po: p.order, qty: conv(isBulk, p.orderQuantity!), dueDate: p.dueDate }));
-    const fromProd = production
-      .filter(p => p.partNumber === part && p.status !== "complete" && p.quantity !== null)
-      .map(p => ({ po: p.order, qty: conv(isBulk, (p.quantity ?? 0) - (p.received ?? 0)), dueDate: p.dueDate }))
-      .filter(p => p.qty > 0);
     const seen = new Set<string>();
     const all: ReadinessPoRef[] = [];
-    for (const p of [...fromPO, ...fromProd]) {
+    for (const p of bulkPOs) {
+      if (p.partNumber !== part || p.orderQuantity === null) continue;
       const d = parseDMY(p.dueDate);
       if (!d || d > by) continue; // must arrive by the run date
-      const key = `${p.po}-${p.qty}`;
+      const rec = { po: p.order, qty: conv(isBulk, p.orderQuantity), dueDate: p.dueDate };
+      const key = `${rec.po}-${rec.qty}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      all.push(p);
+      all.push(rec);
     }
     return all;
   };

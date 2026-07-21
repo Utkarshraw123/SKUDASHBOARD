@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { PRODUCT_TYPES } from "@/lib/production-report";
 
 export interface WorkOrderOption {
@@ -310,6 +311,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
             <div className={`rounded-xl px-4 py-3 text-sm ${result.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
               {result.msg}
               {result.ok && result.blended !== undefined && <> Blended wastage: <strong>{result.blended}%</strong>{result.rows && result.rows > 1 ? ` (${result.rows} bulk rows written)` : ""}.</>}
+              {result.ok && <> <Link href="/planning/yield" className="underline font-medium hover:opacity-70">View in Internal Production Yield →</Link></>}
             </div>
           )}
 
@@ -324,6 +326,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
         <div className={`rounded-xl px-4 py-3 text-sm ${result.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {result.msg}
           {result.ok && result.blended !== undefined && <> Blended wastage: <strong>{result.blended}%</strong>{result.rows && result.rows > 1 ? ` (${result.rows} bulk rows written)` : ""}.</>}
+          {result.ok && <> <Link href="/planning/yield" className="underline font-medium hover:opacity-70">View in Internal Production Yield →</Link></>}
         </div>
       )}
     </form>

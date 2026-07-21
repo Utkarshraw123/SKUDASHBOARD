@@ -402,6 +402,21 @@ export const fetchProductionReports = cache(async (): Promise<ProductionReportRe
   }
 });
 
+// Full production report rows (all 34 cols A..AH), for the Internal Production
+// Yield section. Unlike fetchProductionReports (which returns one summarised
+// record per report), this returns every raw line so the yield engine can group
+// per-bulk detail, roll up wastage, and build the batch-level compliance trace.
+export const fetchProductionReportRows = cache(async (): Promise<string[][]> => {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) return [];
+  try {
+    const rows = await cachedValues(sheetId, "Reports!A2:AH2000");
+    return rows.filter(r => r[1] && String(r[1]).trim() !== ""); // must have a Work Order
+  } catch {
+    return [];
+  }
+});
+
 // Look up a bulk (or any part) description from the Current Inventory tab.
 export async function fetchPartDescription(partNumber: string): Promise<string> {
   const inv = await fetchCurrentInventory();

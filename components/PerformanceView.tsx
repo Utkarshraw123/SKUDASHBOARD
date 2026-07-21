@@ -2,7 +2,7 @@
 
 import { useState, Fragment } from "react";
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  ComposedChart, Bar, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import type { PerformanceData, GroupStat } from "@/lib/performance";
 import { ragOf } from "@/lib/performance";
@@ -161,13 +161,24 @@ export default function PerformanceView({ data }: { data: PerformanceData }) {
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
               <ComposedChart data={data.trend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4ddd4" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8a8480" }} angle={-30} textAnchor="end" height={60} interval="preserveStartEnd" />
-                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#8a8480" }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#8a8480" }} domain={[0, 120]} unit="%" />
-                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e4ddd4", fontSize: 12 }} />
-                <Bar yAxisId="left" dataKey="actual" fill="#c9612e" radius={[4, 4, 0, 0]} name="Actual output" />
-                <Line yAxisId="right" type="monotone" dataKey="efficiency" stroke="#393836" strokeWidth={2} dot={false} name="Efficiency %" />
+                <defs>
+                  <linearGradient id="perfBar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c9612e" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#d9784a" stopOpacity={0.55} />
+                  </linearGradient>
+                  <linearGradient id="perfEff" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#393836" stopOpacity={0.16} />
+                    <stop offset="100%" stopColor="#393836" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4ddd4" vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "#e4ddd4" }} tick={{ fontSize: 11, fill: "#8a8480" }} angle={-30} textAnchor="end" height={60} interval="preserveStartEnd" />
+                <YAxis yAxisId="left" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#8a8480" }} />
+                <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#8a8480" }} domain={[0, 120]} unit="%" />
+                <Tooltip cursor={{ fill: "rgba(201,97,46,0.06)" }} contentStyle={{ borderRadius: 12, border: "1px solid #e4ddd4", backgroundColor: "#fffdf9", fontSize: 12, boxShadow: "0 8px 24px -12px rgba(57,56,54,0.35)" }} labelStyle={{ color: "#393836", fontWeight: 600 }} />
+                <Bar yAxisId="left" dataKey="actual" fill="url(#perfBar)" radius={[5, 5, 0, 0]} name="Actual output" isAnimationActive={false} />
+                <Area yAxisId="right" type="monotone" dataKey="efficiency" stroke="none" fill="url(#perfEff)" animationDuration={1100} name="Efficiency %" legendType="none" tooltipType="none" activeDot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="efficiency" stroke="#393836" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#393836", stroke: "#fffdf9", strokeWidth: 2 }} name="Efficiency %" animationDuration={1400} animationEasing="ease-out" />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

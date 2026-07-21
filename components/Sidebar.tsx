@@ -16,6 +16,7 @@ const productionNav = [
   { href: "/production", label: "External Production", icon: "↗" },
   { href: "/planning", label: "Internal Production", icon: "⊞" },
   { href: "/planning/performance", label: "Production Performance", icon: "◔" },
+  { href: "/planning/yield", label: "Internal Production Yield", icon: "❋" },
   { href: "/planning/readiness", label: "Production Readiness", icon: "⚑" },
   { href: "/packing", label: "Packing Schedule", icon: "⊡" },
   { href: "/purchase-orders", label: "Open Purchase Orders", icon: "≡" },
