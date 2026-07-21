@@ -35,34 +35,47 @@ function KpiCard({ title, value, color }: { title: string; value: number; color:
 
 function ComponentRow({ c }: { c: ComponentCheck }) {
   return (
-    <tr className="border-b border-[#e4ddd4]/50 last:border-0">
-      <td className="py-2 pr-3">
-        <span className={`inline-block w-2 h-2 rounded-full mr-2 align-middle ${COMP_DOT[c.status]}`} />
-        <span className="font-mono text-xs text-copper">{c.code}</span>
-      </td>
-      <td className="py-2 pr-3 text-charcoal">
-        {c.name || "—"}
-        <span className="ml-2 text-[10px] tracking-widest uppercase text-text-muted">{c.kind}</span>
-      </td>
-      <td className="py-2 pr-3 text-right tabular-nums">{fmt(c.need)}</td>
-      <td className="py-2 pr-3 text-right tabular-nums text-text-muted">{fmt(c.onHand)}</td>
-      <td className="py-2 pr-3 text-right tabular-nums text-text-muted">
-        {c.inboundQty > 0 ? fmt(c.inboundQty) : "—"}
-      </td>
-      <td className="py-2 text-right">
-        {c.status === "short" ? (
-          <span className="text-red-600 font-medium tabular-nums">−{fmt(c.shortfall)}</span>
-        ) : c.status === "at_risk" ? (
-          <span className="text-amber-600 text-xs">
-            {c.inboundRefs.length > 0 ? c.inboundRefs.map(r => r.po).join(", ") : "inbound"}
-          </span>
-        ) : c.status === "unknown" ? (
-          <span className="text-text-muted text-xs">{c.note ?? "unknown"}</span>
-        ) : (
-          <span className="text-emerald-600 text-xs">OK</span>
-        )}
-      </td>
-    </tr>
+    <>
+      <tr className={`${c.recommendation ? "" : "border-b border-[#e4ddd4]/50 last:border-0"}`}>
+        <td className="py-2 pr-3">
+          <span className={`inline-block w-2 h-2 rounded-full mr-2 align-middle ${COMP_DOT[c.status]}`} />
+          <span className="font-mono text-xs text-copper">{c.code}</span>
+        </td>
+        <td className="py-2 pr-3 text-charcoal">
+          {c.name || "—"}
+          <span className="ml-2 text-[10px] tracking-widest uppercase text-text-muted">{c.kind}</span>
+        </td>
+        <td className="py-2 pr-3 text-right tabular-nums">{fmt(c.need)}</td>
+        <td className="py-2 pr-3 text-right tabular-nums text-text-muted">{fmt(c.onHand)}</td>
+        <td className="py-2 pr-3 text-right tabular-nums text-text-muted">
+          {c.inboundQty > 0 ? fmt(c.inboundQty) : "—"}
+        </td>
+        <td className="py-2 text-right">
+          {c.status === "short" ? (
+            <span className="text-red-600 font-medium tabular-nums">−{fmt(c.shortfall)}</span>
+          ) : c.status === "at_risk" ? (
+            <span className="text-amber-600 text-xs">
+              {c.inboundRefs.length > 0 ? c.inboundRefs.map(r => r.po).join(", ") : "inbound"}
+            </span>
+          ) : c.status === "unknown" ? (
+            <span className="text-text-muted text-xs">{c.note ?? "unknown"}</span>
+          ) : (
+            <span className="text-emerald-600 text-xs">OK</span>
+          )}
+        </td>
+      </tr>
+      {c.recommendation && (
+        <tr className="border-b border-[#e4ddd4]/50 last:border-0">
+          <td></td>
+          <td colSpan={5} className="pb-2.5 pt-0.5">
+            <span className="inline-flex items-start gap-1.5 text-xs text-amber-700/90 italic">
+              <span aria-hidden className="not-italic">↻</span>
+              {c.recommendation}
+            </span>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -207,17 +220,17 @@ export default function ReadinessView({ result }: { result: ReadinessResult }) {
   function exportCsv() {
     const rows: string[][] = [[
       "Work Order", "Planned Date", "Planned Days", "SKU", "Description", "Qty", "WO Status",
-      "Component", "Kind", "Component Name", "Need", "On Hand", "Inbound", "Shortfall", "Component Status", "Inbound Refs",
+      "Component", "Kind", "Component Name", "Need", "On Hand", "Inbound", "Shortfall", "Component Status", "Inbound Refs", "Recommendation",
     ]];
     for (const wo of result.workOrders) {
       if (wo.components.length === 0) {
-        rows.push([wo.workOrder, wo.plannedDateLabel, wo.plannedDaysLabel, wo.productCode, wo.description, String(wo.netQty), wo.status, "", "", "", "", "", "", "", "", ""]);
+        rows.push([wo.workOrder, wo.plannedDateLabel, wo.plannedDaysLabel, wo.productCode, wo.description, String(wo.netQty), wo.status, "", "", "", "", "", "", "", "", "", ""]);
       }
       for (const c of wo.components) {
         rows.push([
           wo.workOrder, wo.plannedDateLabel, wo.plannedDaysLabel, wo.productCode, wo.description, String(wo.netQty), wo.status,
           c.code, c.kind, c.name, String(Math.round(c.need)), String(Math.round(c.onHand)), String(Math.round(c.inboundQty)),
-          String(Math.round(c.shortfall)), c.status, c.inboundRefs.map(r => `${r.po} (${r.dueDate})`).join("; "),
+          String(Math.round(c.shortfall)), c.status, c.inboundRefs.map(r => `${r.po} (${r.dueDate})`).join("; "), c.recommendation ?? "",
         ]);
       }
     }

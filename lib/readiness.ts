@@ -11,6 +11,11 @@ const PACKING_WAREHOUSES = ["WNP", "WNC"]; // components must be at the packing 
 const RM_WAREHOUSES = ["WNP", "WNC"];      // usable raw-material stock
 const DEFAULT_HORIZON_DAYS = 10;
 
+// Acceptable shortfall tolerance: a component covered to within 5% of its need is
+// treated as fine (not short/at-risk). Small gaps are absorbed by count rounding,
+// slight over-fill, etc. So the effective requirement is need × (1 − 0.05).
+const SHORT_TOLERANCE = 0.05;
+
 // Bulk (1-code) quantities are recorded in THOUSANDS of capsules across the DB
 // (stock AND POs): e.g. 487 means 487,000. Some rows are already written in full
 // (e.g. 487000). Values at/above this threshold are treated as already-actual;
@@ -63,9 +68,10 @@ export interface ComponentCheck {
   availableBefore: number; // stock-only balance before this WO (after earlier WOs)
   inboundQty: number;      // inbound counted as arriving by this WO's date
   inboundRefs: ReadinessPoRef[];
-  shortfall: number;       // >0 when short
+  shortfall: number;       // >0 when short (true gap, even within tolerance display)
   status: ComponentStatus;
   note?: string;
+  recommendation?: string; // advisory, e.g. reschedule to the next delivery
 }
 
 export type WoStatus = "ready" | "at_risk" | "short";
@@ -131,6 +137,18 @@ function parseDMY(s: string): Date | null {
 
 function fmtDMY(d: Date): string {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+// Friendly relative label for a delivery date measured from the run date.
+function relativeWhen(from: Date, to: Date): string {
+  const days = Math.round((to.getTime() - from.getTime()) / 86400000);
+  if (days <= 0) return "already due";
+  if (days === 1) return "tomorrow";
+  if (days <= 6) return `in ${days} days`;
+  if (days <= 13) return "next week";
+  if (days <= 27) return `in ${Math.round(days / 7)} weeks`;
+  if (days <= 45) return "next month";
+  return `in ${Math.round(days / 30)} months`;
 }
 
 // Derive a WO's planned date from PLANNED WEEK (week-commencing Monday) + PLANNED DAYS.
@@ -223,6 +241,35 @@ export function computeReadiness(inputs: {
     return all;
   };
 
+  // Earliest incoming Open-PO delivery for a part, due strictly AFTER `after`
+  // (regardless of horizon) — powers the reschedule recommendation.
+  const nextDeliveryFor = (part: string, isBulk: boolean, after: Date): { dueDate: Date; label: string; qty: number } | null => {
+    let best: { dueDate: Date; label: string; qty: number } | null = null;
+    for (const p of bulkPOs) {
+      if (p.partNumber !== part || p.orderQuantity === null) continue;
+      const d = parseDMY(p.dueDate);
+      if (!d || d <= after) continue;
+      if (!best || d < best.dueDate) best = { dueDate: d, label: p.dueDate, qty: conv(isBulk, p.orderQuantity) };
+    }
+    return best;
+  };
+
+  // Advisory note for a component that isn't fully covered.
+  const recommendFor = (check: ComponentCheck, woDate: Date): string | undefined => {
+    if (check.status === "short") {
+      const next = nextDeliveryFor(check.code, check.kind === "bulk", woDate);
+      const kind = check.kind === "bulk" ? "bulk" : "component";
+      if (next) return `This ${kind} is due ${relativeWhen(woDate, next.dueDate)} (${next.label}) — if you can reschedule the run to then, it can be covered.`;
+      return `No incoming delivery on file — raise or expedite a PO before the run.`;
+    }
+    if (check.status === "at_risk") {
+      const ref = check.inboundRefs[0];
+      if (ref) return `Covered only by inbound ${ref.po}, due ${ref.dueDate} — confirm it lands before the run.`;
+      return `Relies on inbound arriving before the run — confirm the PO.`;
+    }
+    return undefined;
+  };
+
   // 1. Select in-scope work orders.
   interface ScopedWo {
     row: PlanningRow;
@@ -292,7 +339,9 @@ export function computeReadiness(inputs: {
       } else {
         const need = wo.netQty * wo.fill;
         const st = getState(wo.bulkCode, bulkName(inventory, wo.bulkCode), "bulk");
-        components.push(evaluate(st, need, wo.date, advance));
+        const check = evaluate(st, need, wo.date, advance);
+        check.recommendation = recommendFor(check, wo.date);
+        components.push(check);
       }
     }
 
@@ -305,7 +354,9 @@ export function computeReadiness(inputs: {
         const need = wo.netQty * comp.qty;
         if (need <= 0) continue;
         const st = getState(comp.code, comp.name, "ancillary");
-        components.push(evaluate(st, need, wo.date, advance));
+        const check = evaluate(st, need, wo.date, advance);
+        check.recommendation = recommendFor(check, wo.date);
+        components.push(check);
       }
     }
 
@@ -346,7 +397,8 @@ export function computeReadiness(inputs: {
       const onHand = sumBulkStock(inventory, code, PACKING_WAREHOUSES);
       const inbound = inboundFor(code, true, to).reduce((s, r) => s + r.qty, 0);
       const shortfallCaps = Math.max(0, totalNeed - onHand - inbound);
-      if (shortfallCaps <= 0) return; // enough bulk supply for the window — nothing to make
+      // Within the 5% tolerance → treat as covered, nothing to make.
+      if (shortfallCaps <= totalNeed * SHORT_TOLERANCE) return;
 
       const woRefs = Array.from(new Set(
         production.filter(p => p.partNumber === code && p.status !== "complete").map(p => p.order).filter(Boolean),
@@ -403,10 +455,12 @@ function evaluate(st: CompState, need: number, date: Date, advance: (s: CompStat
   const inboundBefore = st.inboundBalance;
   const inboundQty = inboundBefore - stockBefore; // future inbound folded in so far
 
+  // A gap of up to SHORT_TOLERANCE (5%) of need is acceptable → effective need.
+  const effNeed = need * (1 - SHORT_TOLERANCE);
   let status: ComponentStatus;
   let shortfall = 0;
-  if (stockBefore >= need) status = "ok";
-  else if (inboundBefore >= need) status = "at_risk";
+  if (stockBefore >= effNeed) status = "ok";
+  else if (inboundBefore >= effNeed) status = "at_risk";
   else { status = "short"; shortfall = need - inboundBefore; }
 
   // consume regardless so shortages cascade to later WOs sharing the part
