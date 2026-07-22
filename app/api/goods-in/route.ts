@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { put } from "@vercel/blob";
 import { appendGoodsInRecord, updateGoodsInRecord } from "@/lib/sheets";
 import { GOODS_IN_HEADERS, recordToRow, type GoodsInRecord } from "@/lib/goods-in";
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
     } else {
       await appendGoodsInRecord(GOODS_IN_HEADERS, recordToRow(record));
     }
+    revalidateTag("sheets"); // bust the 120s read cache so the tasks/records lists reflect this write immediately
     return NextResponse.json({ ok: true, record, warnings });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to save record";

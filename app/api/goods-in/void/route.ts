@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { voidGoodsInRecord } from "@/lib/sheets";
 
 export const runtime = "nodejs";
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await voidGoodsInRecord(recordId, fallbackKey);
+    revalidateTag("sheets"); // bust the 120s read cache so the list reflects the void immediately
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to delete record";
