@@ -37,14 +37,15 @@ export interface GoodsInRecord {
   comments: string;
   coaUrl: string;
   docUrls: string[];
-  status: string;            // "Booked in"
+  status: string;            // "Booked in" | "Void"
+  recordId: string;          // stable id for edit/void targeting; "" for legacy rows
 }
 
 // Sheet column order for the Goods In tab (append-only, like Reports).
 export const GOODS_IN_HEADERS = [
   "Timestamp", "PO Number", "Part Number", "Description", "Quantity", "Supplier",
   "Supplier Product Code", "Batch/Lot No.", "BBD", "Haulier", "Date", "Time",
-  "CofA Received", "Comments", "COA URL", "Document URLs", "Status",
+  "CofA Received", "Comments", "COA URL", "Document URLs", "Status", "Record ID",
 ];
 
 function str(v: unknown): string {
@@ -91,13 +92,14 @@ export function recordToRow(r: GoodsInRecord): (string | number)[] {
   return [
     r.timestamp, r.po, r.partNumber, r.description, r.quantity, r.supplier,
     r.supplierProductCode, r.batchLot, r.bbd, r.haulier, r.date, r.time,
-    r.cofaReceived, r.comments, r.coaUrl, r.docUrls.join(" | "), r.status,
+    r.cofaReceived, r.comments, r.coaUrl, r.docUrls.join(" | "), r.status, r.recordId,
   ];
 }
 
 export function parseGoodsInRecords(rows: (string | number)[][]): GoodsInRecord[] {
   return rows
-    .filter(r => str(r[1]) !== "") // must have a PO
+    .filter(r => str(r[1]) !== "")                          // must have a PO
+    .filter(r => str(r[16]).toLowerCase() !== "void")       // drop voided (soft-deleted) rows
     .map(r => ({
       timestamp: str(r[0]),
       po: str(r[1]),
@@ -116,8 +118,9 @@ export function parseGoodsInRecords(rows: (string | number)[][]): GoodsInRecord[
       coaUrl: str(r[14]),
       docUrls: str(r[15]).split("|").map(s => s.trim()).filter(Boolean),
       status: str(r[16]) || "Booked in",
+      recordId: str(r[17]),
     }))
-    .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")); // newest first
+    .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
 }
 
 // Build the goods-in task list from open POs. Booked-in POs (a record exists)
