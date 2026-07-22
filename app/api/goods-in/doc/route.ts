@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     coaUrl: s(body.coaUrl),
     docUrls: Array.isArray(body.docUrls) ? body.docUrls.map(s) : [],
     status: s(body.status),
+    recordId: s(body.recordId),
   };
 
   const buf = await buildGoodsInDoc(rec);

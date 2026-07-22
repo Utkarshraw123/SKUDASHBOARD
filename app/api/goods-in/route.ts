@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { appendGoodsInRecord } from "@/lib/sheets";
+import { appendGoodsInRecord, updateGoodsInRecord } from "@/lib/sheets";
 import { GOODS_IN_HEADERS, recordToRow, type GoodsInRecord } from "@/lib/goods-in";
 
 export const runtime = "nodejs";
@@ -50,8 +50,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const editId = g("recordId");
+  const existingCoa = g("coaUrlExisting");
+  const existingDocs = g("docUrlsExisting").split("|").map(s => s.trim()).filter(Boolean);
+
   const record: GoodsInRecord = {
-    timestamp: new Date().toISOString(),
+    timestamp: editId ? (g("timestamp") || new Date().toISOString()) : new Date().toISOString(),
     po,
     partNumber: g("partNumber"),
     description: g("description"),
@@ -65,13 +69,20 @@ export async function POST(req: NextRequest) {
     time: g("time"),
     cofaReceived: g("cofaReceived"),
     comments: g("comments"),
-    coaUrl,
-    docUrls,
+    // keep existing attachments on edit unless new ones were uploaded
+    coaUrl: coaUrl || existingCoa,
+    docUrls: docUrls.length ? docUrls : existingDocs,
     status: "Booked in",
+    recordId: editId || `${po}-${g("partNumber")}-${Date.now()}`,
   };
 
   try {
-    await appendGoodsInRecord(GOODS_IN_HEADERS, recordToRow(record));
+    if (editId) {
+      const fallbackKey = `${record.po} ${record.partNumber} ${record.timestamp}`;
+      await updateGoodsInRecord(editId, recordToRow(record), fallbackKey);
+    } else {
+      await appendGoodsInRecord(GOODS_IN_HEADERS, recordToRow(record));
+    }
     return NextResponse.json({ ok: true, record, warnings });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to save record";
