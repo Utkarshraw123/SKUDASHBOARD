@@ -50,12 +50,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const isEdit = g("editMode") === "1";
   const editId = g("recordId");
   const existingCoa = g("coaUrlExisting");
   const existingDocs = g("docUrlsExisting").split("|").map(s => s.trim()).filter(Boolean);
 
   const record: GoodsInRecord = {
-    timestamp: editId ? (g("timestamp") || new Date().toISOString()) : new Date().toISOString(),
+    timestamp: isEdit ? (g("timestamp") || new Date().toISOString()) : new Date().toISOString(),
     po,
     partNumber: g("partNumber"),
     description: g("description"),
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    if (editId) {
+    if (isEdit) {
       const fallbackKey = `${record.po} ${record.partNumber} ${record.timestamp}`;
       await updateGoodsInRecord(editId, recordToRow(record), fallbackKey);
     } else {

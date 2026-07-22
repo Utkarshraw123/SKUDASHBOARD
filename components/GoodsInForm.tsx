@@ -31,6 +31,7 @@ export default function GoodsInForm({ task, record, onClose }: { task: GoodsInTa
       quantity: task.quantity != null ? String(task.quantity) : "", supplier: task.supplier,
       supplierProductCode, batchLot, bbd,
       ...(isEdit ? {
+        editMode: "1",
         recordId: record!.recordId,
         timestamp: record!.timestamp,
         coaUrlExisting: record!.coaUrl,
