@@ -52,10 +52,10 @@ export default function GoodsInView({ tasks, records }: { tasks: GoodsInTask[]; 
   return (
     <div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <Kpi label="Awaiting" value={s.awaiting} color="text-copper" sub="to book in" />
+        <Kpi label="Awaiting" value={s.awaiting} color="text-copper" sub="G-In form to file" />
         <Kpi label="Due Today" value={s.dueToday} color={s.dueToday > 0 ? "text-amber-600" : undefined} />
         <Kpi label="Overdue" value={s.overdue} color={s.overdue > 0 ? "text-red-600" : undefined} />
-        <Kpi label="Booked In" value={s.bookedIn} color="text-emerald-600" />
+        <Kpi label="Filed" value={s.bookedIn} color="text-emerald-600" sub="G-In forms done" />
       </div>
 
       {/* Today's tasks */}
@@ -65,7 +65,7 @@ export default function GoodsInView({ tasks, records }: { tasks: GoodsInTask[]; 
           {(["awaiting", "booked_in", "all"] as const).map(f => (
             <button key={f} type="button" onClick={() => setFilter(f)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${filter === f ? "bg-copper text-white border-copper" : "border-[#e4ddd4] text-text-muted hover:bg-cream"}`}>
-              {f === "awaiting" ? "Awaiting" : f === "booked_in" ? "Booked in" : "All"}
+              {f === "awaiting" ? "Awaiting" : f === "booked_in" ? "Filed" : "All"}
             </button>
           ))}
         </div>
@@ -74,7 +74,7 @@ export default function GoodsInView({ tasks, records }: { tasks: GoodsInTask[]; 
       <div className="bg-white rounded-2xl border border-[#e4ddd4] overflow-hidden mb-10">
         {shown.length === 0 ? (
           <p className="px-5 py-12 text-center text-text-muted text-sm">
-            {tasks.length === 0 ? "No open purchase orders to book in." : "Nothing matches this filter."}
+            {tasks.length === 0 ? "No open purchase orders." : "Nothing matches this filter."}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -106,11 +106,14 @@ export default function GoodsInView({ tasks, records }: { tasks: GoodsInTask[]; 
                       </td>
                       <td className={`${TD} text-right`}>
                         {t.status === "booked_in" ? (
-                          <span className="inline-block rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-0.5 text-[10px] font-medium">Booked in</span>
+                          <button onClick={() => setActive(t)}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-0.5 text-[10px] font-medium hover:bg-emerald-200 transition-colors">
+                            Filed · reopen
+                          </button>
                         ) : (
                           <button onClick={() => setActive(t)}
                             className="rounded-lg bg-copper text-white px-3 py-1.5 text-xs font-medium hover:bg-copper-light transition-colors">
-                            Book in →
+                            G-In form →
                           </button>
                         )}
                       </td>
@@ -130,7 +133,7 @@ export default function GoodsInView({ tasks, records }: { tasks: GoodsInTask[]; 
       </div>
       <div className="bg-white rounded-2xl border border-[#e4ddd4] overflow-hidden">
         {records.length === 0 ? (
-          <p className="px-5 py-12 text-center text-text-muted text-sm">No forms filed yet. Book in a delivery above to create one.</p>
+          <p className="px-5 py-12 text-center text-text-muted text-sm">No forms filed yet. Open a G-In form above and save it to create one.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

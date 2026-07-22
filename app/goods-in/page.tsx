@@ -17,7 +17,7 @@ export default async function GoodsInPage() {
       <div className="mb-8">
         <h1 className="font-serif text-3xl font-medium text-charcoal tracking-wide">Goods In</h1>
         <p className="text-text-muted text-sm mt-2 tracking-wide">
-          Today&rsquo;s incoming deliveries from open purchase orders. Click a PO to book it in &mdash; record batch &amp; BBD, attach the CofA, and generate the QA13-CF01 form for the warehouse.
+          Today&rsquo;s incoming deliveries from open purchase orders. Open a PO&rsquo;s <strong>G-In form</strong> &mdash; compliance records supplier code, batch/lot &amp; BBD, then downloads the QA13-CF01 Word form for the warehouse to complete by hand. Filed forms appear below.
         </p>
       </div>
       <GoodsInView tasks={tasks} records={records} />
