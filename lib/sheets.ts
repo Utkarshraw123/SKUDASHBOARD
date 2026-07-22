@@ -473,3 +473,46 @@ export async function appendProductionReport(
     requestBody: { values: rows },
   });
 }
+
+const GOODS_IN_TAB = "Goods In";
+
+// Read every filled Goods In record (raw rows, minus the header).
+export const fetchGoodsInRows = cache(async (): Promise<string[][]> => {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) return [];
+  try {
+    const rows = await cachedValues(sheetId, `${GOODS_IN_TAB}!A2:Q2000`);
+    return rows.filter(r => r[1] && String(r[1]).trim() !== ""); // must have a PO
+  } catch {
+    return []; // tab not created yet
+  }
+});
+
+// Append one Goods In record. Bootstraps the tab + header row on first write.
+export async function appendGoodsInRecord(headers: string[], row: (string | number)[]): Promise<void> {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) throw new Error("PRODUCTION_REPORTS_SHEET_ID env var missing");
+  const sheets = await getSheets();
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
+  const hasTab = (meta.data.sheets ?? []).some(s => s.properties?.title === GOODS_IN_TAB);
+  if (!hasTab) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: GOODS_IN_TAB } } }] },
+    });
+  }
+
+  const existing = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `${GOODS_IN_TAB}!1:1` });
+  const currentHeader = (existing.data.values?.[0] ?? []) as string[];
+  if (currentHeader.length < headers.length || headers.some((h, i) => currentHeader[i] !== h)) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId, range: `${GOODS_IN_TAB}!A1`, valueInputOption: "RAW", requestBody: { values: [headers] },
+    });
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId, range: `${GOODS_IN_TAB}!A1`, valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS", requestBody: { values: [row] },
+  });
+}
