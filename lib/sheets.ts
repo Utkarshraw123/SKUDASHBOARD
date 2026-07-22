@@ -481,7 +481,7 @@ export const fetchGoodsInRows = cache(async (): Promise<string[][]> => {
   const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
   if (!sheetId) return [];
   try {
-    const rows = await cachedValues(sheetId, `${GOODS_IN_TAB}!A2:Q2000`);
+    const rows = await cachedValues(sheetId, `${GOODS_IN_TAB}!A2:R2000`);
     return rows.filter(r => r[1] && String(r[1]).trim() !== ""); // must have a PO
   } catch {
     return []; // tab not created yet
@@ -514,5 +514,45 @@ export async function appendGoodsInRecord(headers: string[], row: (string | numb
   await sheets.spreadsheets.values.append({
     spreadsheetId: sheetId, range: `${GOODS_IN_TAB}!A1`, valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS", requestBody: { values: [row] },
+  });
+}
+
+// Find a Goods In row (1-based sheet row number) by Record ID (col R, index 17).
+// Falls back to `${po} ${part} ${timestamp}` (cols B,C,A) for legacy rows without an ID.
+async function findGoodsInRow(
+  sheets: Awaited<ReturnType<typeof getSheets>>,
+  sheetId: string,
+  recordId: string,
+  fallbackKey?: string,
+): Promise<number> {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `${GOODS_IN_TAB}!A2:R2000` });
+  const rows = (res.data.values ?? []) as string[][];
+  let i = rows.findIndex(r => String(r[17] ?? "").trim() === recordId && recordId !== "");
+  if (i < 0 && fallbackKey) {
+    i = rows.findIndex(r => `${String(r[1] ?? "").trim()} ${String(r[2] ?? "").trim()} ${String(r[0] ?? "").trim()}` === fallbackKey);
+  }
+  if (i < 0) throw new Error("Record not found");
+  return i + 2;
+}
+
+// Overwrite an existing Goods In record in place (edit). `row` must be 18 cells (A..R).
+export async function updateGoodsInRecord(recordId: string, row: (string | number)[], fallbackKey?: string): Promise<void> {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) throw new Error("PRODUCTION_REPORTS_SHEET_ID env var missing");
+  const sheets = await getSheets();
+  const n = await findGoodsInRow(sheets, sheetId, recordId, fallbackKey);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId, range: `${GOODS_IN_TAB}!A${n}:R${n}`, valueInputOption: "RAW", requestBody: { values: [row] },
+  });
+}
+
+// Soft-delete: set the Status cell (col Q) to "Void". Keeps the audit trail.
+export async function voidGoodsInRecord(recordId: string, fallbackKey?: string): Promise<void> {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) throw new Error("PRODUCTION_REPORTS_SHEET_ID env var missing");
+  const sheets = await getSheets();
+  const n = await findGoodsInRow(sheets, sheetId, recordId, fallbackKey);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId, range: `${GOODS_IN_TAB}!Q${n}`, valueInputOption: "RAW", requestBody: { values: [["Void"]] },
   });
 }
