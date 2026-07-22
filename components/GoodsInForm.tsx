@@ -2,19 +2,20 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { GoodsInTask } from "@/lib/goods-in";
+import type { GoodsInTask, GoodsInRecord } from "@/lib/goods-in";
 
 const inputCls = "w-full rounded-lg border border-[#e4ddd4] px-3 py-2 text-sm text-charcoal focus:outline-none focus:border-copper bg-white";
 const labelCls = "block text-[11px] tracking-widest uppercase text-text-muted mb-1";
 
-export default function GoodsInForm({ task, onClose }: { task: GoodsInTask; onClose: () => void }) {
+export default function GoodsInForm({ task, record, onClose }: { task: GoodsInTask; record?: GoodsInRecord; onClose: () => void }) {
   const router = useRouter();
 
   // The three fields compliance fills. Everything else on the form is left blank
   // for the warehouse to complete by hand on the downloaded Word document.
-  const [supplierProductCode, setSupplierProductCode] = useState("");
-  const [batchLot, setBatchLot] = useState("");
-  const [bbd, setBbd] = useState("");
+  const isEdit = !!record;
+  const [supplierProductCode, setSupplierProductCode] = useState(record?.supplierProductCode ?? "");
+  const [batchLot, setBatchLot] = useState(record?.batchLot ?? "");
+  const [bbd, setBbd] = useState(record?.bbd ?? "");
   const [password, setPassword] = useState("");
 
   const coaRef = useRef<HTMLInputElement>(null);
@@ -29,6 +30,12 @@ export default function GoodsInForm({ task, onClose }: { task: GoodsInTask; onCl
       po: task.po, partNumber: task.partNumber, description: task.description,
       quantity: task.quantity != null ? String(task.quantity) : "", supplier: task.supplier,
       supplierProductCode, batchLot, bbd,
+      ...(isEdit ? {
+        recordId: record!.recordId,
+        timestamp: record!.timestamp,
+        coaUrlExisting: record!.coaUrl,
+        docUrlsExisting: record!.docUrls.join(" | "),
+      } : {}),
     };
   }
 
@@ -79,7 +86,7 @@ export default function GoodsInForm({ task, onClose }: { task: GoodsInTask; onCl
       <div className="w-full max-w-xl rounded-2xl bg-cream border border-[#e4ddd4] shadow-xl my-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-[#e4ddd4]">
           <div>
-            <h2 className="font-serif text-xl text-charcoal">G-In form &mdash; QA13-CF01</h2>
+            <h2 className="font-serif text-xl text-charcoal">{isEdit ? "Edit" : "G-In form"} &mdash; QA13-CF01</h2>
             <p className="text-xs text-text-muted mt-1">Record supplier code, batch/lot &amp; BBD, then download the Word form for the warehouse.</p>
           </div>
           <button onClick={onClose} className="text-text-muted hover:text-charcoal text-xl leading-none">&times;</button>
@@ -89,7 +96,7 @@ export default function GoodsInForm({ task, onClose }: { task: GoodsInTask; onCl
           // ---- success ----
           <div className="px-6 py-8 text-center">
             <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center text-2xl">✓</div>
-            <p className="font-serif text-lg text-charcoal">G-In form filed &amp; downloaded</p>
+            <p className="font-serif text-lg text-charcoal">G-In form {isEdit ? "updated" : "filed"} &amp; downloaded</p>
             <p className="text-sm text-text-muted mt-2 max-w-sm mx-auto">
               The QA13-CF01 Word file is in your downloads &mdash; send it to the warehouse to complete the checks by hand.
               It&rsquo;s also saved under <strong className="text-charcoal">Filed Goods In forms</strong> below, where you can download it again anytime.
