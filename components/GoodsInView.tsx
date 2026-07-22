@@ -137,10 +137,10 @@ export default function GoodsInView({ tasks, records }: { tasks: GoodsInTask[]; 
                 </tr>
               </thead>
               <tbody>
-                {shown.map(t => {
+                {shown.map((t, i) => {
                   const u = URGENCY[t.urgency];
                   return (
-                    <tr key={t.po + t.partNumber} className="border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors">
+                    <tr key={t.po + t.partNumber + i} className="border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors">
                       <td className={`${TD} font-mono text-xs text-copper`}>{t.po}</td>
                       <td className={`${TD} font-mono text-xs`}>{t.partNumber}</td>
                       <td className="px-4 py-3 text-charcoal max-w-[240px] truncate" title={t.description}>{t.description}</td>
