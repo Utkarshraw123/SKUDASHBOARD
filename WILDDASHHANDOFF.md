@@ -155,14 +155,17 @@ AD Product Type · AE Disposal Number · AF Comments · AG Report ID · AH Bulk 
 ```
 Invariant: cols A–AC (index 0–28) unchanged from the original 29-col layout; the FIRST bulk row of a report carries report-level fields (Made, ancillary waste, blended %), later bulk rows leave them blank so column sums don't double-count. `fetchProductionReports` filters rows where **Made (col 11)** is populated → one record per report.
 
-**Tab `Goods In` — 17 columns A–Q** (NEW this session; `lib/goods-in.ts` `GOODS_IN_HEADERS`; auto-bootstrapped on first write by `appendGoodsInRecord`; read back by `fetchGoodsInRows` A2:Q):
+**Tab `Goods In` — 18 columns A–R** (`lib/goods-in.ts` `GOODS_IN_HEADERS`; auto-bootstrapped/header-extended on first write by `appendGoodsInRecord`; read back by `fetchGoodsInRows` A2:R). Col R (Record ID) added 2026-07-22 for edit/void targeting:
 
 ```
 A Timestamp · B PO Number · C Part Number · D Description · E Quantity · F Supplier ·
 G Supplier Product Code · H Batch/Lot No. · I BBD · J Haulier · K Date · L Time ·
-M CofA Received · N Comments · O COA URL · P Document URLs (" | " joined) · Q Status ("Booked in")
+M CofA Received · N Comments · O COA URL · P Document URLs (" | " joined) ·
+Q Status ("Booked in" | "Void") · R Record ID
 ```
-Currently filled by the app: A–I + O/P/Q. J–N are schema placeholders (blank; those fields live on the Word doc for the warehouse). One record = one PO line (PO + part).
+Currently filled by the app: A–I + O/P/Q/R. J–N are schema placeholders (blank; those fields live on the Word doc for the warehouse). One record = one PO line (PO + part).
+
+**Edit / Void / part-code filters (added 2026-07-22, spec `docs/superpowers/specs/2026-07-22-goods-in-edit-void-filters-design.md`):** filed records can be edited in place (`updateGoodsInRecord`, keyed by Record ID col R or fallback `${po} ${part} ${timestamp}` for the blank-ID legacy row) and deleted via soft-Void (`voidGoodsInRecord` → Status col Q = "Void"; `parseGoodsInRecords` filters Void → PO returns to awaiting). Edit mode is detected by an explicit `editMode="1"` form field (NOT recordId truthiness — the real PO2600151 row has a blank Record ID). Part-code filter chips on both lists derive from the part number's leading digit (`partCategory`). See CONTEXT.md §6i for the full write-up. New runtime deps: none.
 
 ### 4c. Relations
 No FK relations (it's Sheets). Logical joins done in code by key:
