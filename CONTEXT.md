@@ -137,6 +137,15 @@ In-dashboard view of everything reported via the production form — replaces ha
 - **`fetchProductionReportRows()`** reads `Reports!A2:AH2000` (all 34 cols, every per-bulk line). **`lib/internal-yield.ts`** (pure, unit-tested against live data) groups lines by Report ID (legacy rows key on WO+timestamp; primary row = Made populated) → `computeInternalYield`: `reports` (full detail + bulks + ancillary waste), `byWorkOrder` (made-weighted blended %), `byWeek` (ISO week), `byMonth`, `byAncillary` (precise pooled % = Σwaste/Σ(made+waste) per jars/lids/labels/box/pouches/desiccants), `batches` (one row per bulk = compliance trace: product batch↔bulk batch↔BBD↔disposal#), `summary` KPIs.
 - **`components/InternalYieldView.tsx`** — count-up KPIs, Weekly/Monthly wastage trend (Recharts, gradient bars `isAnimationActive={false}`), ancillary bar chart, WO table, batch-tracking compliance table, expandable per-run line items. Three CSV exports (by-WO, batch-tracking, line-items) via `ExportCsvButton`.
 
+## 6i. Goods In (deployed 2026-07-22)
+
+Receiving workflow. `/goods-in`, sidebar "Goods In". Open Purchase Orders become the day's goods-in tasks (sorted overdue/today first; `awaiting` vs `booked_in` based on whether a record exists for the PO).
+
+- Click a PO → `components/GoodsInForm.tsx` modal, pre-filled from the PO row (PO#, Part Number, Description, Quantity, Supplier=vendorName). Compliance fills Supplier Product Code, Batch/Lot No., BBD, Haulier, Date/Time (default now), CofA received (Y/N), comments; attaches CofA + other documents.
+- **Word doc:** `lib/goods-in-doc.ts` builds the editable **QA13-CF01 "Goods In & Out Form"** `.docx` (via `docx` lib) — reproduces the user's template (sheet `1ANaz90LscwnCn_b9slh9w5lPh3YmhKRk6fZYp9iucvs`, readable by the service account): core fields pre-filled, QA checklist (vehicle/pallet/cert/QC/signs) left blank for compliance. `POST /api/goods-in/doc` (JSON→docx download). Downloadable from the form and the records list.
+- **Persistence:** `POST /api/goods-in` (multipart) → uploads attachments to **Vercel Blob** (`put`, guarded by `BLOB_READ_WRITE_TOKEN`; degrades with a warning if unset — records still save, ~4.5MB server-upload limit) → appends a row to a new **"Goods In" tab** (auto-bootstrapped, 17 cols, `GOODS_IN_HEADERS`) in `PRODUCTION_REPORTS_SHEET_ID`. `fetchGoodsInRows` reads it back; `parseGoodsInRecords`/`buildGoodsInTasks` in `lib/goods-in.ts` (pure). Password gate: `GOODS_IN_PASSWORD` ?? `PRODUCTION_REPORT_PASSWORD` ?? "12345".
+- **To enable uploads:** enable Blob storage in the Vercel project (adds `BLOB_READ_WRITE_TOKEN`), redeploy.
+
 ## 6e. Production Readiness — MRP-lite (deployed 2026-07-20)
 
 Flags any WNP work order in the next 10 days whose components won't be available in
