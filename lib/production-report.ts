@@ -9,6 +9,27 @@ export const PRODUCT_TYPES: { value: ProductType; label: string }[] = [
   { value: "powders", label: "Powders" },
 ];
 
+// Derive the FG product type from its description (specific keywords before generic).
+export function deriveProductType(description: string): ProductType | "" {
+  const d = (description ?? "").toLowerCase();
+  if (d.includes("daily essential")) return "daily_essentials";
+  if (d.includes("powder")) return "powders";
+  if (d.includes("refill")) return "refills";
+  if (d.includes("jar")) return "jars";
+  return "";
+}
+
+// Validate a typed BBD. Empty is allowed; non-empty must be a real DD/MM/YYYY date.
+export function isValidDMY(s: string): boolean {
+  const t = (s ?? "").trim();
+  if (!t) return true;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (!m) return false;
+  const dd = +m[1], mm = +m[2], yyyy = +m[3];
+  const d = new Date(yyyy, mm - 1, dd);
+  return d.getFullYear() === yyyy && d.getMonth() === mm - 1 && d.getDate() === dd;
+}
+
 // A finished-good batch produced on the work order.
 export interface ProductBatchEntry {
   batch: string;

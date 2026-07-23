@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { PRODUCT_TYPES } from "@/lib/production-report";
+import { PRODUCT_TYPES, deriveProductType, isValidDMY } from "@/lib/production-report";
 
 export interface WorkOrderOption {
   workOrder: string;
@@ -98,7 +98,10 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
     setSku(o.sku);
     setBatches([{ batch: o.productBatch, bbd: o.productBBD }]);
     setBulks([{ ...emptyBulk(), bulkCode: o.bulkCode, bulkDescription: o.bulkDescription }]);
+    setProductType(deriveProductType(o.description));
   }
+
+  const datesValid = batches.every(b => isValidDMY(b.bbd)) && bulks.every(b => isValidDMY(b.bulkBBD));
 
   // batch helpers
   const addBatch = () => setBatches(b => [...b, { batch: "", bbd: "" }]);
@@ -121,6 +124,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) { setResult({ ok: false, msg: "Please select a work order first." }); return; }
+    if (!datesValid) { setResult({ ok: false, msg: "Please fix the highlighted BBD dates — use DD/MM/YYYY." }); return; }
     setSubmitting(true);
     setResult(null);
     try {
@@ -223,7 +227,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
                 <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <div><label className={labelCls}>Batch {batches.length > 1 ? i + 1 : ""}</label><input className={inputCls} value={row.batch} onChange={e => setBatch(i, { batch: e.target.value })} /></div>
                   <div className="flex items-end gap-2">
-                    <div className="flex-1"><label className={labelCls}>BBD</label><input className={inputCls} value={row.bbd} onChange={e => setBatch(i, { bbd: e.target.value })} placeholder="DD/MM/YYYY" /></div>
+                    <div className="flex-1"><label className={labelCls}>BBD</label><input className={`${inputCls} ${isValidDMY(row.bbd) ? "" : "border-red-400 focus:border-red-400 focus:ring-red-200"}`} value={row.bbd} onChange={e => setBatch(i, { bbd: e.target.value })} placeholder="DD/MM/YYYY" />{!isValidDMY(row.bbd) && <p className="text-red-600 text-[11px] mt-1">Use DD/MM/YYYY</p>}</div>
                     {batches.length > 1 && (
                       <button type="button" onClick={() => removeBatch(i)} className={`${removeBtnCls} pb-2.5`} aria-label="Remove batch">Remove</button>
                     )}
@@ -252,7 +256,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
                     <div><label className={labelCls}>Bulk Code</label><input className={inputCls} value={row.bulkCode} onChange={e => setBulk(i, { bulkCode: e.target.value })} /></div>
                     <div><label className={labelCls}>Bulk Description</label><input className={inputCls} value={row.bulkDescription} onChange={e => setBulk(i, { bulkDescription: e.target.value })} /></div>
                     <div><label className={labelCls}>Bulk Batch</label><input className={inputCls} value={row.bulkBatch} onChange={e => setBulk(i, { bulkBatch: e.target.value })} placeholder="Read off the drum" /></div>
-                    <div><label className={labelCls}>Bulk BBD</label><input className={inputCls} value={row.bulkBBD} onChange={e => setBulk(i, { bulkBBD: e.target.value })} placeholder="DD/MM/YYYY" /></div>
+                    <div><label className={labelCls}>Bulk BBD</label><input className={`${inputCls} ${isValidDMY(row.bulkBBD) ? "" : "border-red-400 focus:border-red-400 focus:ring-red-200"}`} value={row.bulkBBD} onChange={e => setBulk(i, { bulkBBD: e.target.value })} placeholder="DD/MM/YYYY" />{!isValidDMY(row.bulkBBD) && <p className="text-red-600 text-[11px] mt-1">Use DD/MM/YYYY</p>}</div>
                     <div><label className={labelCls}>Used (caps)</label><input type="number" className={inputCls} value={row.used} onChange={e => setBulk(i, { used: e.target.value })} /></div>
                     <div><label className={labelCls}>Capsules Wasted</label><input type="number" className={inputCls} value={row.wasteCapsules} onChange={e => setBulk(i, { wasteCapsules: e.target.value })} /></div>
                   </div>
