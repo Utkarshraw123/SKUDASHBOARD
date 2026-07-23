@@ -33,19 +33,35 @@ export default function GoodsInPoForm({ task, onClose }: { task: GoodsInPoTask; 
   const allReceived = rows.every(r => r.received);
   const toggleAll = () => setRows(rs => rs.map(r => ({ ...r, received: !allReceived })));
 
-  const receivedLinePayload = () =>
-    task.lines
-      .map((l, i) => ({ l, r: rows[i] }))
-      .filter(({ r }) => r.received)
+  const receivedRows = () => task.lines.map((l, i) => ({ l, r: rows[i] })).filter(({ r }) => r.received);
+
+  // All received lines — used for the combined Word doc (lists everything received).
+  const docLines = () =>
+    receivedRows().map(({ l, r }) => ({
+      partNumber: l.partNumber, description: l.description,
+      quantity: l.quantity != null ? String(l.quantity) : "",
+      supplierProductCode: r.supplierProductCode, batchLot: r.batchLot, bbd: r.bbd,
+    }));
+
+  // Only NEW or CHANGED received lines get written — never rewrite an untouched filed line
+  // (that would wipe its stored CofA/docs). Edited existing lines carry their attachments through.
+  const saveLines = () =>
+    receivedRows()
+      .filter(({ l, r }) =>
+        !l.record ||
+        r.supplierProductCode !== (l.record.supplierProductCode ?? "") ||
+        r.batchLot !== (l.record.batchLot ?? "") ||
+        r.bbd !== (l.record.bbd ?? ""))
       .map(({ l, r }) => ({
         partNumber: l.partNumber, description: l.description,
         quantity: l.quantity != null ? String(l.quantity) : "", supplier: task.supplier,
         supplierProductCode: r.supplierProductCode, batchLot: r.batchLot, bbd: r.bbd,
         existing: !!l.record, recordId: l.record?.recordId ?? "", timestamp: l.record?.timestamp ?? "",
+        existingCoa: l.record?.coaUrl ?? "", existingDocs: l.record?.docUrls ?? [],
       }));
 
   async function downloadDoc() {
-    const lines = receivedLinePayload();
+    const lines = docLines();
     const res = await fetch("/api/goods-in/doc/po", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ po: task.po, supplier: task.supplier, lines }),
@@ -61,7 +77,7 @@ export default function GoodsInPoForm({ task, onClose }: { task: GoodsInPoTask; 
   async function preview() {
     setBusy("doc"); setError("");
     try {
-      if (receivedLinePayload().length === 0) { setError("Tick at least one received line first."); return; }
+      if (docLines().length === 0) { setError("Tick at least one received line first."); return; }
       await downloadDoc();
     } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
@@ -70,8 +86,8 @@ export default function GoodsInPoForm({ task, onClose }: { task: GoodsInPoTask; 
   async function save() {
     setBusy("save"); setError("");
     try {
-      const lines = receivedLinePayload();
-      if (lines.length === 0) { setError("Tick at least one received line."); return; }
+      const lines = saveLines();
+      if (lines.length === 0) { setError("No new or changed lines to save. Tick a product and enter its batch."); return; }
       const fd = new FormData();
       fd.append("po", task.po);
       fd.append("supplier", task.supplier);

@@ -124,6 +124,7 @@ export interface PoLineInput {
   partNumber: string; description: string; quantity: string; supplier: string;
   supplierProductCode: string; batchLot: string; bbd: string;
   existing: boolean; recordId?: string; timestamp?: string;
+  existingCoa?: string; existingDocs?: string[];
 }
 
 // Map submitted PO lines → records to write, flagged create vs update-in-place.
@@ -140,7 +141,10 @@ export function poLinesToRecords(input: {
       timestamp, po: input.po, partNumber: l.partNumber, description: l.description,
       quantity: l.quantity, supplier: l.supplier, supplierProductCode: l.supplierProductCode,
       batchLot: l.batchLot, bbd: l.bbd, haulier: "", date: "", time: "", cofaReceived: "",
-      comments: "", coaUrl: input.coaUrl, docUrls: input.docUrls, status: "Booked in", recordId,
+      comments: "",
+      coaUrl: input.coaUrl || l.existingCoa || "",
+      docUrls: input.docUrls.length ? input.docUrls : (l.existingDocs ?? []),
+      status: "Booked in", recordId,
     };
     return { record, isEdit: l.existing, fallbackKey: `${input.po} ${l.partNumber} ${timestamp}` };
   });

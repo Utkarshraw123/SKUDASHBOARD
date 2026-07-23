@@ -32,10 +32,11 @@ export async function POST(req: NextRequest) {
       if (isEdit) await updateGoodsInRecord(record.recordId, recordToRow(record), fallbackKey);
       else await appendGoodsInRecord(GOODS_IN_HEADERS, recordToRow(record));
     }
-    revalidateTag("sheets");
     return NextResponse.json({ ok: true, records: mapped.map(m => m.record), warnings });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to save records";
     return NextResponse.json({ error: msg }, { status: 500 });
+  } finally {
+    revalidateTag("sheets");
   }
 }
