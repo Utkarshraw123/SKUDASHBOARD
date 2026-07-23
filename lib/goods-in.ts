@@ -20,6 +20,31 @@ export interface GoodsInTask {
   urgency: Urgency;
 }
 
+export interface GoodsInLine {
+  partNumber: string;
+  description: string;
+  partType: string;
+  quantity: number | null;
+  dueDate: string;
+  dueISO: string;
+  urgency: Urgency;
+  record: GoodsInRecord | null;
+}
+
+export type GoodsInPoStatus = "awaiting" | "partial" | "filed";
+
+export interface GoodsInPoTask {
+  po: string;
+  supplier: string;
+  lines: GoodsInLine[];
+  totalCount: number;
+  filedCount: number;
+  status: GoodsInPoStatus;
+  dueDate: string;   // earliest UNFILED line due (DD/MM/YYYY), or ""
+  dueISO: string;
+  urgency: Urgency;
+}
+
 export interface GoodsInRecord {
   timestamp: string;
   po: string;
@@ -171,6 +196,72 @@ export function buildGoodsInTasks(pos: BulkPoRow[], records: GoodsInRecord[], to
     if (rank[a.urgency] !== rank[b.urgency]) return rank[a.urgency] - rank[b.urgency];
     return (a.dueISO || "9999").localeCompare(b.dueISO || "9999");
   });
+}
+
+// Group open stock PO lines by PO for the multi-line "file the whole PO" form.
+export function buildGoodsInPoTasks(pos: BulkPoRow[], records: GoodsInRecord[], today = new Date()): GoodsInPoTask[] {
+  const t0 = new Date(today); t0.setHours(0, 0, 0, 0);
+  const urgencyOf = (due: Date | null): Urgency => {
+    if (!due) return "none";
+    const days = Math.round((due.getTime() - t0.getTime()) / 86400000);
+    if (days < 0) return "overdue";
+    if (days === 0) return "today";
+    if (days <= 7) return "soon";
+    return "later";
+  };
+  const rank: Record<Urgency, number> = { overdue: 0, today: 1, soon: 2, later: 3, none: 4 };
+  const recByKey = new Map<string, GoodsInRecord>();
+  for (const r of records) recByKey.set(`${r.po} ${r.partNumber}`, r);
+
+  const groups = new Map<string, { supplier: string; lines: GoodsInLine[] }>();
+  for (const p of pos) {
+    if (!isStockPart(p.partNumber)) continue;
+    const due = parseDMY(p.dueDate);
+    const line: GoodsInLine = {
+      partNumber: p.partNumber, description: p.description, partType: p.partType,
+      quantity: p.orderQuantity, dueDate: p.dueDate, dueISO: due ? toISO(due) : "",
+      urgency: urgencyOf(due), record: recByKey.get(`${p.order} ${p.partNumber}`) ?? null,
+    };
+    const g = groups.get(p.order);
+    if (g) g.lines.push(line);
+    else groups.set(p.order, { supplier: p.vendorName, lines: [line] });
+  }
+
+  const tasks: GoodsInPoTask[] = Array.from(groups.entries()).map(([po, g]) => {
+    const total = g.lines.length;
+    const filedCount = g.lines.filter(l => l.record).length;
+    const status: GoodsInPoStatus = filedCount === 0 ? "awaiting" : filedCount === total ? "filed" : "partial";
+    const pool = g.lines.filter(l => !l.record);
+    const src = pool.length ? pool : g.lines;
+    let earliest: GoodsInLine | null = null;
+    for (const l of src) {
+      if (!l.dueISO) continue;
+      if (!earliest || (earliest.dueISO && l.dueISO < earliest.dueISO)) earliest = l;
+    }
+    if (!earliest) earliest = src[0];
+    return {
+      po, supplier: g.supplier, lines: g.lines, totalCount: total, filedCount, status,
+      dueDate: earliest?.dueDate ?? "", dueISO: earliest?.dueISO ?? "", urgency: earliest?.urgency ?? "none",
+    };
+  });
+
+  const statusRank: Record<GoodsInPoStatus, number> = { awaiting: 0, partial: 1, filed: 2 };
+  return tasks.sort((a, b) => {
+    if (statusRank[a.status] !== statusRank[b.status]) return statusRank[a.status] - statusRank[b.status];
+    if (rank[a.urgency] !== rank[b.urgency]) return rank[a.urgency] - rank[b.urgency];
+    return (a.dueISO || "9999").localeCompare(b.dueISO || "9999");
+  });
+}
+
+export function summarisePo(tasks: GoodsInPoTask[]) {
+  return {
+    total: tasks.length,
+    awaiting: tasks.filter(t => t.status === "awaiting").length,
+    partial: tasks.filter(t => t.status === "partial").length,
+    filed: tasks.filter(t => t.status === "filed").length,
+    dueToday: tasks.filter(t => t.status !== "filed" && t.urgency === "today").length,
+    overdue: tasks.filter(t => t.status !== "filed" && t.urgency === "overdue").length,
+  };
 }
 
 export function summarise(tasks: GoodsInTask[]) {
