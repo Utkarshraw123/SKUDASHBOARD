@@ -185,3 +185,131 @@ export function docFilename(r: GoodsInRecord): string {
   const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
   return `GoodsIn-${safe(r.po) || "PO"}-${safe(r.partNumber)}.docx`;
 }
+
+// Combined multi-line QA13-CF01 for a whole PO — same checklist/sign sections as
+// buildGoodsInDoc, but with a single products table instead of one core-fields block.
+export interface GoodsInPoLine {
+  partNumber: string;
+  description: string;
+  quantity: string;
+  supplierProductCode: string;
+  batchLot: string;
+  bbd: string;
+}
+
+export async function buildGoodsInPoDoc(input: { po: string; supplier: string; lines: GoodsInPoLine[] }): Promise<Buffer> {
+  const H = (t: string, w: number, align?: (typeof AlignmentType)[keyof typeof AlignmentType]) => cell(w, t, { head: true, align });
+  const COLS = [1750, 3216, 900, 1800, 1600, 1400]; // = CW (10666): Part, Description, Qty, Supplier Code, Batch/Lot, BBD
+  const productsTable = table(COLS, [
+    new TableRow({ children: [
+      H("Part", COLS[0]), H("Description", COLS[1]), H("Qty", COLS[2], AlignmentType.RIGHT),
+      H("Supplier Product Code", COLS[3]), H("Batch/Lot No.", COLS[4]), H("BBD", COLS[5]),
+    ] }),
+    ...input.lines.map(l => new TableRow({ children: [
+      cell(COLS[0], l.partNumber), cell(COLS[1], l.description),
+      cell(COLS[2], l.quantity, { align: AlignmentType.RIGHT }),
+      cell(COLS[3], l.supplierProductCode), cell(COLS[4], l.batchLot), cell(COLS[5], l.bbd),
+    ] })),
+  ]);
+
+  const doc = new Document({
+    styles: { default: { document: { run: { font: "Calibri" } } } },
+    sections: [{
+      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 620, bottom: 620, left: 620, right: 620 } } },
+      children: [
+        // Header: title (left) + Date / Time / PO Number (right)
+        table([pct(64), pct(36)], [new TableRow({ children: [
+          new TableCell({
+            width: { size: pct(64), type: WidthType.DXA },
+            verticalAlign: VerticalAlign.CENTER,
+            margins: { top: 120, bottom: 120, left: 150, right: 150 },
+            children: [para([run("Goods In & Out Form", { bold: true, size: 34 })]), para([run("QA13-CF01 V4", { size: 15, color: MUTE })])],
+          }),
+          new TableCell({
+            width: { size: pct(36), type: WidthType.DXA },
+            verticalAlign: VerticalAlign.CENTER,
+            margins: { top: 90, bottom: 90, left: 150, right: 150 },
+            children: [
+              para([run("Date: ", { bold: true }), run("")], { spacing: { after: 90 } }),
+              para([run("Time: ", { bold: true }), run("")], { spacing: { after: 90 } }),
+              para([run("PO Number: ", { bold: true }), run(input.po)]),
+            ],
+          }),
+        ] })]),
+        gap(),
+
+        // Supplier line + products table (multi-line, replaces the single core-fields block)
+        table([pct(50), pct(50)], [
+          new TableRow({ children: [fieldCell(pct(50), "PO Number:", input.po), fieldCell(pct(50), "Supplier:", input.supplier)] }),
+        ]),
+        gap(),
+        bar("Products received"),
+        productsTable,
+        gap(),
+
+        // Inbound checks
+        table([pct(58), pct(8), pct(8), pct(26)], [
+          new TableRow({ children: [
+            cell(pct(58), "CofA/CoC received? (Inbound only)"),
+            cell(pct(8), "YES", { head: true, align: AlignmentType.CENTER }),
+            cell(pct(8), "NO", { head: true, align: AlignmentType.CENTER }),
+            cell(pct(26), "Sign. VP / JB:"),
+          ] }),
+          new TableRow({ children: [
+            cell(pct(58), "Do the details of goods and the delivery note match? (Inbound only)"),
+            cell(pct(8), "YES", { head: true, align: AlignmentType.CENTER }),
+            cell(pct(8), "NO", { head: true, align: AlignmentType.CENTER }),
+            cell(pct(26), "Sign:"),
+          ] }),
+        ]),
+        gap(),
+
+        checklist("Vehicle Condition (Haulier)", [
+          { item: "Free from pest activity", example: "Droppings, Footprints", action: "If 'Deny' is ticked, hold the driver/vehicle and inform Compliance/Operations/Supply Chain Manager. The decision/inspection will be made on whether to proceed with the unloading/loading of goods." },
+          { item: "Free from foreign bodies", example: "Metal, Wood, Glass" },
+          { item: "Free from spillages or leaks", example: "Odours, Spillages, Leakages" },
+        ]),
+        gap(),
+
+        checklist("Product & Pallet Condition", [
+          { item: "Pallet is in good condition", example: "Damage, Cleanliness", action: "If 'Deny' is ticked, place the pallet on hold and inform Compliance/Operations/Supply Chain Manager." },
+          { item: "Product is in good condition", example: "Damage, Exposed Material" },
+        ]),
+        gap(),
+
+        bar("Please refer to Product List to determine whether the certification is applicable", { italics: true, size: 16 }),
+        checklist("Certification (If Applicable)", [
+          { item: "MSC", example: "", action: "If not labelled, do not book in and inform Compliance/Operations/Supply Chain Manager." },
+          { item: "Soil Association (Organic)", example: "" },
+        ]),
+        gap(),
+
+        bar("FINISHED GOODS ONLY", { head: true, bold: true }),
+        bar("Once goods are booked in and checked, collect one shipper from the pallet then conduct the following and confirm:", { italics: true, size: 16 }),
+        table([pct(70), pct(15), pct(15)], [
+          new TableRow({ children: [cell(pct(70), "QC Check", { head: true }), cell(pct(15), "Confirm", { head: true, align: AlignmentType.CENTER }), cell(pct(15), "Deny", { head: true, align: AlignmentType.CENTER })] }),
+          ...["Correct Product", "Batch, BBD & FG Quantity", "10 Samples in QC"].map(t =>
+            new TableRow({ children: [cell(pct(70), t), cell(pct(15), ""), cell(pct(15), "")] })),
+        ]),
+        gap(),
+
+        bar("Comments / Deviations", { head: true, bold: true }),
+        table([CW], [new TableRow({ children: [new TableCell({ width: { size: CW, type: WidthType.DXA }, margins: { top: 80, bottom: 80, left: 110, right: 110 }, children: emptyLines(6) })] })]),
+        gap(),
+
+        table([pct(30), pct(70)], [
+          new TableRow({ children: [cell(pct(30), "SIGN", { bold: true }), cell(pct(70), "")] }),
+          new TableRow({ children: [cell(pct(30), "COMPLIANCE SIGN", { bold: true }), cell(pct(70), "")] }),
+        ]),
+      ],
+    }],
+  });
+
+  return Packer.toBuffer(doc);
+}
+
+// Safe filename for the generated combined document.
+export function poDocFilename(po: string): string {
+  const safe = (s: string) => (s || "").replace(/[^A-Za-z0-9._-]+/g, "-");
+  return `GoodsIn-${safe(po) || "PO"}-all.docx`;
+}
