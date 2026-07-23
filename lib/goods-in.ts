@@ -120,6 +120,32 @@ export function isStockPart(partNumber: string): boolean {
 // Goods In only receives stock (1/2/3/4) — the "Other" chip is dropped from its filter.
 export const GOODS_IN_PART_CHIPS = PART_CATEGORY_CHIPS.filter(c => c.key !== "other");
 
+export interface PoLineInput {
+  partNumber: string; description: string; quantity: string; supplier: string;
+  supplierProductCode: string; batchLot: string; bbd: string;
+  existing: boolean; recordId?: string; timestamp?: string;
+}
+
+// Map submitted PO lines → records to write, flagged create vs update-in-place.
+export function poLinesToRecords(input: {
+  po: string; lines: PoLineInput[]; coaUrl: string; docUrls: string[]; now?: string;
+}): { record: GoodsInRecord; isEdit: boolean; fallbackKey: string }[] {
+  const now = input.now ?? new Date().toISOString();
+  return input.lines.map((l, i) => {
+    const timestamp = l.existing ? (l.timestamp || now) : now;
+    const recordId = l.recordId && l.recordId.trim()
+      ? l.recordId.trim()
+      : `${input.po}-${l.partNumber}-${Date.now()}-${i}`;
+    const record: GoodsInRecord = {
+      timestamp, po: input.po, partNumber: l.partNumber, description: l.description,
+      quantity: l.quantity, supplier: l.supplier, supplierProductCode: l.supplierProductCode,
+      batchLot: l.batchLot, bbd: l.bbd, haulier: "", date: "", time: "", cofaReceived: "",
+      comments: "", coaUrl: input.coaUrl, docUrls: input.docUrls, status: "Booked in", recordId,
+    };
+    return { record, isEdit: l.existing, fallbackKey: `${input.po} ${l.partNumber} ${timestamp}` };
+  });
+}
+
 export function recordToRow(r: GoodsInRecord): (string | number)[] {
   return [
     r.timestamp, r.po, r.partNumber, r.description, r.quantity, r.supplier,
