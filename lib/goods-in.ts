@@ -88,6 +88,13 @@ export const PART_CATEGORY_CHIPS: { key: PartCategory | "all"; label: string }[]
   { key: "other", label: "Other" },
 ];
 
+export function isStockPart(partNumber: string): boolean {
+  return partCategory(partNumber) !== "other";
+}
+
+// Goods In only receives stock (1/2/3/4) — the "Other" chip is dropped from its filter.
+export const GOODS_IN_PART_CHIPS = PART_CATEGORY_CHIPS.filter(c => c.key !== "other");
+
 export function recordToRow(r: GoodsInRecord): (string | number)[] {
   return [
     r.timestamp, r.po, r.partNumber, r.description, r.quantity, r.supplier,
@@ -142,7 +149,7 @@ export function buildGoodsInTasks(pos: BulkPoRow[], records: GoodsInRecord[], to
   };
   const rank: Record<Urgency, number> = { overdue: 0, today: 1, soon: 2, later: 3, none: 4 };
 
-  const tasks = pos.map((p): GoodsInTask => {
+  const tasks = pos.filter(p => isStockPart(p.partNumber)).map((p): GoodsInTask => {
     const due = parseDMY(p.dueDate);
     return {
       po: p.order,
