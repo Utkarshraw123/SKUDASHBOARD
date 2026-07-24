@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { YieldReport } from "@/lib/internal-yield";
 import ExportCsvButton from "./ExportCsvButton";
 
@@ -96,12 +97,13 @@ export default function ProductionRecordsView({ reports }: { reports: YieldRepor
                 <th className={TH}>Disposal #</th>
                 <th className={TH}>Comments</th>
                 <th className={TH}>Report ID</th>
+                <th className={THR}>Edit</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-text-muted" colSpan={17}>
+                  <td className="px-4 py-10 text-center text-text-muted" colSpan={18}>
                     No production reports {q ? "match your search" : "yet"}.
                   </td>
                 </tr>
@@ -129,6 +131,16 @@ export default function ProductionRecordsView({ reports }: { reports: YieldRepor
                     <td className={`${TD} font-mono text-xs`}>{dash(r.disposalNumber)}</td>
                     <td className={`${TD} max-w-[16rem] truncate`} title={r.comments}>{dash(r.comments)}</td>
                     <td className={`${TD} font-mono text-[11px] text-text-muted`}>{dash(r.reportId)}</td>
+                    <td className={`${TD} text-right`}>
+                      {r.reportId ? (
+                        <Link
+                          href={`/planning/report?edit=${encodeURIComponent(r.reportId)}`}
+                          className="text-xs font-medium text-copper hover:text-copper-light transition-colors"
+                        >
+                          Edit
+                        </Link>
+                      ) : "—"}
+                    </td>
                   </tr>
                 ))
               )}

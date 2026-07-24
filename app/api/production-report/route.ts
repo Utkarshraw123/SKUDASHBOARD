@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import {
-  computeWastage, reportToRows, REPORT_HEADERS,
+  computeWastage, reportToRows, REPORT_HEADERS, isRequiredDMY,
   type ProductionReportInput, type ProductBatchEntry, type BulkEntry,
 } from "@/lib/production-report";
-import { appendProductionReport } from "@/lib/sheets";
+import { appendProductionReport, updateProductionReport } from "@/lib/sheets";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "At least one bulk is required" }, { status: 400 });
   }
 
+  // BBD validation (server-side, matching the form): every active batch and bulk
+  // must carry a real DD/MM/YYYY best-before date — required, no blanks.
+  if (batches.some(b => !isRequiredDMY(b.bbd))) {
+    return NextResponse.json({ error: "Every product batch needs a valid BBD (DD/MM/YYYY)." }, { status: 400 });
+  }
+  if (bulks.some(b => !isRequiredDMY(b.bulkBBD))) {
+    return NextResponse.json({ error: "Every bulk needs a valid BBD (DD/MM/YYYY)." }, { status: 400 });
+  }
+
   const anc = (body.ancWaste ?? {}) as Record<string, unknown>;
   const input: ProductionReportInput = {
     workOrder: String(body.workOrder ?? ""),
@@ -85,11 +95,24 @@ export async function POST(req: NextRequest) {
     comments: String(body.comments ?? ""),
   };
 
+  const editReportId = String(body.editReportId ?? "").trim();
+  const editTimestamp = String(body.editTimestamp ?? "").trim();
+
   try {
     const wastage = computeWastage(input);
+    if (editReportId) {
+      // Edit: reuse the report's original id + timestamp, update rows in place.
+      const rows = reportToRows(input, wastage, { reportId: editReportId, timestamp: editTimestamp || undefined });
+      await updateProductionReport(editReportId, REPORT_HEADERS, rows);
+      revalidateTag("sheets");
+      return NextResponse.json({ ok: true, wastage, rowsWritten: rows.length, updated: true });
+    }
     const rows = reportToRows(input, wastage);
     await appendProductionReport(REPORT_HEADERS, rows);
-    return NextResponse.json({ ok: true, wastage, rowsWritten: rows.length });
+    revalidateTag("sheets");
+    // Report ID lives in col AG (index 32) and is shared by every row of the report.
+    const reportId = String(rows[0]?.[32] ?? "");
+    return NextResponse.json({ ok: true, wastage, rowsWritten: rows.length, reportId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to save report";
     return NextResponse.json({ error: msg }, { status: 500 });

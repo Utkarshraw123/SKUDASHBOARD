@@ -474,6 +474,87 @@ export async function appendProductionReport(
   });
 }
 
+// Column index of "Report ID" in the Reports tab (col AG, 0-based 32).
+const REPORT_ID_COL = 32;
+
+// Update an existing production report in place: append the new version (with the
+// SAME Report ID) first, then delete the old rows for that Report ID. Append-first
+// means a failure can never lose the report — at worst it leaves a recoverable
+// duplicate. A report spans one row per bulk, all sharing the Report ID.
+export async function updateProductionReport(
+  reportId: string,
+  headers: string[],
+  newRows: (string | number)[][],
+): Promise<void> {
+  const sheetId = process.env.PRODUCTION_REPORTS_SHEET_ID;
+  if (!sheetId) throw new Error("PRODUCTION_REPORTS_SHEET_ID env var missing");
+  if (!reportId) throw new Error("reportId is required to update a report");
+  if (newRows.length === 0) return;
+  const sheets = await getSheets();
+
+  // Resolve the Reports tab's numeric sheetId (needed for row deletion).
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
+  const tab = (meta.data.sheets ?? []).find(s => s.properties?.title === REPORTS_TAB);
+  const gid = tab?.properties?.sheetId;
+  if (gid == null) throw new Error("Reports tab not found");
+
+  // Upsert the header row (same logic as append) so new columns stay labelled.
+  const existingHeader = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: `${REPORTS_TAB}!1:1`,
+  });
+  const currentHeader = (existingHeader.data.values?.[0] ?? []) as string[];
+  if (currentHeader.length < headers.length || headers.some((h, i) => currentHeader[i] !== h)) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `${REPORTS_TAB}!A1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [headers] },
+    });
+  }
+
+  // Find the existing rows for this report. Data starts at sheet row 2 (A2),
+  // so a 0-based data index i maps to 1-based sheet row (i + 2).
+  const data = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: `${REPORTS_TAB}!A2:AH2000`,
+  });
+  const dataRows = (data.data.values ?? []) as string[][];
+  const oldSheetRows: number[] = [];
+  dataRows.forEach((r, i) => {
+    if (String(r[REPORT_ID_COL] ?? "").trim() === reportId.trim()) oldSheetRows.push(i + 2);
+  });
+
+  // 1) Append the new version first (durable).
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: `${REPORTS_TAB}!A1`,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: newRows },
+  });
+
+  // 2) Delete the old rows, descending so earlier indices don't shift.
+  if (oldSheetRows.length > 0) {
+    const requests = oldSheetRows
+      .sort((a, b) => b - a)
+      .map(sheetRow => ({
+        deleteDimension: {
+          range: {
+            sheetId: gid,
+            dimension: "ROWS",
+            startIndex: sheetRow - 1, // deleteDimension is 0-based, end exclusive
+            endIndex: sheetRow,
+          },
+        },
+      }));
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests },
+    });
+  }
+}
+
 const GOODS_IN_TAB = "Goods In";
 
 // Read every filled Goods In record (raw rows, minus the header).

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { PRODUCT_TYPES, deriveProductType, isValidDMY } from "@/lib/production-report";
+import { PRODUCT_TYPES, deriveProductType, isRequiredDMY } from "@/lib/production-report";
 
 export interface WorkOrderOption {
   workOrder: string;
@@ -36,6 +36,32 @@ interface BulkRow {
 
 const emptyBulk = (): BulkRow => ({ bulkCode: "", bulkDescription: "", bulkBatch: "", bulkBBD: "", used: "", wasteCapsules: "" });
 
+// Pre-fill payload when editing an existing report (all numerics as strings to
+// match the form inputs). Built server-side in app/planning/report/page.tsx.
+export interface EditReport {
+  reportId: string;
+  timestamp: string;
+  workOrder: string;
+  sku: string;
+  description: string;
+  productType: string;
+  batches: BatchRow[];
+  bulks: BulkRow[];
+  made: string;
+  people: string;
+  woStatus: string;
+  anc: Record<AncKey, string>;
+  disposalNumber: string;
+  comments: string;
+}
+
+// An active row is one the user intends to submit; empty placeholder rows are
+// ignored (mirrors the server-side filter). BBD is required only on active rows.
+const batchActive = (b: BatchRow) => b.batch.trim() !== "" || b.bbd.trim() !== "";
+const bulkActive = (b: BulkRow) =>
+  b.bulkCode.trim() !== "" || b.bulkDescription.trim() !== "" || b.bulkBatch.trim() !== "" ||
+  b.used.trim() !== "" || b.wasteCapsules.trim() !== "";
+
 const inputCls =
   "w-full rounded-xl border border-[#e4ddd4] bg-white px-3.5 py-2.5 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper transition-all";
 const labelCls = "block text-[10px] tracking-widest uppercase text-text-muted mb-1.5";
@@ -44,32 +70,40 @@ const addBtnCls =
 const removeBtnCls =
   "text-[11px] text-text-muted hover:text-red-600 transition-colors";
 
-export default function ProductionReportForm({ options }: { options: WorkOrderOption[] }) {
+export default function ProductionReportForm({ options, editReport }: { options: WorkOrderOption[]; editReport?: EditReport }) {
+  const isEdit = !!editReport;
+  const editWO: WorkOrderOption | null = editReport
+    ? {
+        workOrder: editReport.workOrder, sku: editReport.sku, description: editReport.description,
+        productBatch: "", productBBD: "", bulkCode: "", bulkDescription: "",
+      }
+    : null;
+
   const [unlocked, setUnlocked] = useState(false);
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState("");
 
-  const [woQuery, setWoQuery] = useState("");
-  const [selected, setSelected] = useState<WorkOrderOption | null>(null);
+  const [woQuery, setWoQuery] = useState(editReport?.workOrder ?? "");
+  const [selected, setSelected] = useState<WorkOrderOption | null>(editWO);
 
   // editable pre-filled fields
-  const [description, setDescription] = useState("");
-  const [sku, setSku] = useState("");
-  const [productType, setProductType] = useState("");
+  const [description, setDescription] = useState(editReport?.description ?? "");
+  const [sku, setSku] = useState(editReport?.sku ?? "");
+  const [productType, setProductType] = useState(editReport?.productType ?? "");
 
   // repeatable groups
-  const [batches, setBatches] = useState<BatchRow[]>([{ batch: "", bbd: "" }]);
-  const [bulks, setBulks] = useState<BulkRow[]>([emptyBulk()]);
+  const [batches, setBatches] = useState<BatchRow[]>(editReport?.batches?.length ? editReport.batches : [{ batch: "", bbd: "" }]);
+  const [bulks, setBulks] = useState<BulkRow[]>(editReport?.bulks?.length ? editReport.bulks : [emptyBulk()]);
 
   // manual report-level fields
-  const [made, setMade] = useState("");
-  const [people, setPeople] = useState("");
-  const [woStatus, setWoStatus] = useState("complete");
-  const [anc, setAnc] = useState<Record<AncKey, string>>({
+  const [made, setMade] = useState(editReport?.made ?? "");
+  const [people, setPeople] = useState(editReport?.people ?? "");
+  const [woStatus, setWoStatus] = useState(editReport?.woStatus || "complete");
+  const [anc, setAnc] = useState<Record<AncKey, string>>(editReport?.anc ?? {
     jars: "", lids: "", labels: "", box: "", pouches: "", desiccants: "",
   });
-  const [disposalNumber, setDisposalNumber] = useState("");
-  const [comments, setComments] = useState("");
+  const [disposalNumber, setDisposalNumber] = useState(editReport?.disposalNumber ?? "");
+  const [comments, setComments] = useState(editReport?.comments ?? "");
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string; blended?: number; rows?: number } | null>(null);
@@ -101,7 +135,14 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
     setProductType(deriveProductType(o.description));
   }
 
-  const datesValid = batches.every(b => isValidDMY(b.bbd)) && bulks.every(b => isValidDMY(b.bulkBBD));
+  // BBD is required (no blanks) + valid on every active batch/bulk row.
+  const datesValid =
+    batches.every(b => !batchActive(b) || isRequiredDMY(b.bbd)) &&
+    bulks.every(b => !bulkActive(b) || isRequiredDMY(b.bulkBBD));
+
+  const batchBbdBad = (row: BatchRow) => batchActive(row) && !isRequiredDMY(row.bbd);
+  const bulkBbdBad = (row: BulkRow) => bulkActive(row) && !isRequiredDMY(row.bulkBBD);
+  const bbdHint = (v: string) => (v.trim() === "" ? "BBD required" : "Use DD/MM/YYYY");
 
   // batch helpers
   const addBatch = () => setBatches(b => [...b, { batch: "", bbd: "" }]);
@@ -124,7 +165,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) { setResult({ ok: false, msg: "Please select a work order first." }); return; }
-    if (!datesValid) { setResult({ ok: false, msg: "Please fix the highlighted BBD dates — use DD/MM/YYYY." }); return; }
+    if (!datesValid) { setResult({ ok: false, msg: "Every batch and bulk needs a BBD — use DD/MM/YYYY." }); return; }
     setSubmitting(true);
     setResult(null);
     try {
@@ -140,11 +181,15 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
           made, people, woStatus,
           ancWaste: anc,
           disposalNumber, comments,
+          ...(isEdit ? { editReportId: editReport!.reportId, editTimestamp: editReport!.timestamp } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok) { setResult({ ok: false, msg: data.error || "Failed to save." }); }
-      else {
+      else if (isEdit) {
+        // Keep the form populated after an edit so further tweaks are possible.
+        setResult({ ok: true, msg: "Report updated.", blended: data.wastage?.blendedPct, rows: data.rowsWritten });
+      } else {
         setResult({ ok: true, msg: "Report saved to the production sheet.", blended: data.wastage?.blendedPct, rows: data.rowsWritten });
         resetVariableFields();
         setSelected(null); setWoQuery("");
@@ -171,18 +216,25 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {isEdit && (
+        <div className="rounded-xl bg-copper/10 border border-copper/30 px-4 py-3 text-sm text-charcoal">
+          Editing report <span className="font-mono text-xs">{editReport!.reportId}</span> — saving overwrites the existing record (its ID and date are kept).
+        </div>
+      )}
+
       {/* Work order selector */}
       <div className="bg-white rounded-2xl border border-[#e4ddd4] p-5">
         <label className={labelCls}>Work Order</label>
         <input
           type="text"
           value={woQuery}
-          onChange={e => { setWoQuery(e.target.value); setSelected(null); }}
+          onChange={e => { if (isEdit) return; setWoQuery(e.target.value); setSelected(null); }}
+          readOnly={isEdit}
           placeholder="Search by WO number, SKU or description…"
-          className={inputCls}
+          className={`${inputCls} ${isEdit ? "bg-cream cursor-not-allowed" : ""}`}
           autoComplete="off"
         />
-        {!selected && woQuery && (
+        {!isEdit && !selected && woQuery && (
           <div className="mt-2 border border-[#e4ddd4] rounded-xl overflow-hidden divide-y divide-[#e4ddd4]/60">
             {matches.length === 0 ? (
               <p className="px-3.5 py-3 text-xs text-text-muted">No matching work orders.</p>
@@ -227,7 +279,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
                 <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <div><label className={labelCls}>Batch {batches.length > 1 ? i + 1 : ""}</label><input className={inputCls} value={row.batch} onChange={e => setBatch(i, { batch: e.target.value })} /></div>
                   <div className="flex items-end gap-2">
-                    <div className="flex-1"><label className={labelCls}>BBD</label><input className={`${inputCls} ${isValidDMY(row.bbd) ? "" : "border-red-400 focus:border-red-400 focus:ring-red-200"}`} value={row.bbd} onChange={e => setBatch(i, { bbd: e.target.value })} placeholder="DD/MM/YYYY" />{!isValidDMY(row.bbd) && <p className="text-red-600 text-[11px] mt-1">Use DD/MM/YYYY</p>}</div>
+                    <div className="flex-1"><label className={labelCls}>BBD</label><input className={`${inputCls} ${batchBbdBad(row) ? "border-red-400 focus:border-red-400 focus:ring-red-200" : ""}`} value={row.bbd} onChange={e => setBatch(i, { bbd: e.target.value })} placeholder="DD/MM/YYYY" />{batchBbdBad(row) && <p className="text-red-600 text-[11px] mt-1">{bbdHint(row.bbd)}</p>}</div>
                     {batches.length > 1 && (
                       <button type="button" onClick={() => removeBatch(i)} className={`${removeBtnCls} pb-2.5`} aria-label="Remove batch">Remove</button>
                     )}
@@ -256,7 +308,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
                     <div><label className={labelCls}>Bulk Code</label><input className={inputCls} value={row.bulkCode} onChange={e => setBulk(i, { bulkCode: e.target.value })} /></div>
                     <div><label className={labelCls}>Bulk Description</label><input className={inputCls} value={row.bulkDescription} onChange={e => setBulk(i, { bulkDescription: e.target.value })} /></div>
                     <div><label className={labelCls}>Bulk Batch</label><input className={inputCls} value={row.bulkBatch} onChange={e => setBulk(i, { bulkBatch: e.target.value })} placeholder="Read off the drum" /></div>
-                    <div><label className={labelCls}>Bulk BBD</label><input className={`${inputCls} ${isValidDMY(row.bulkBBD) ? "" : "border-red-400 focus:border-red-400 focus:ring-red-200"}`} value={row.bulkBBD} onChange={e => setBulk(i, { bulkBBD: e.target.value })} placeholder="DD/MM/YYYY" />{!isValidDMY(row.bulkBBD) && <p className="text-red-600 text-[11px] mt-1">Use DD/MM/YYYY</p>}</div>
+                    <div><label className={labelCls}>Bulk BBD</label><input className={`${inputCls} ${bulkBbdBad(row) ? "border-red-400 focus:border-red-400 focus:ring-red-200" : ""}`} value={row.bulkBBD} onChange={e => setBulk(i, { bulkBBD: e.target.value })} placeholder="DD/MM/YYYY" />{bulkBbdBad(row) && <p className="text-red-600 text-[11px] mt-1">{bbdHint(row.bulkBBD)}</p>}</div>
                     <div><label className={labelCls}>Used (caps)</label><input type="number" className={inputCls} value={row.used} onChange={e => setBulk(i, { used: e.target.value })} /></div>
                     <div><label className={labelCls}>Capsules Wasted</label><input type="number" className={inputCls} value={row.wasteCapsules} onChange={e => setBulk(i, { wasteCapsules: e.target.value })} /></div>
                   </div>
@@ -321,7 +373,7 @@ export default function ProductionReportForm({ options }: { options: WorkOrderOp
 
           <button type="submit" disabled={submitting}
             className="w-full bg-copper text-white rounded-xl py-3 text-sm font-medium hover:bg-copper-light transition-colors disabled:opacity-50">
-            {submitting ? "Saving…" : "Submit Production Report"}
+            {submitting ? "Saving…" : isEdit ? "Save Changes" : "Submit Production Report"}
           </button>
         </>
       )}

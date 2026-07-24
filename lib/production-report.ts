@@ -30,6 +30,12 @@ export function isValidDMY(s: string): boolean {
   return d.getFullYear() === yyyy && d.getMonth() === mm - 1 && d.getDate() === dd;
 }
 
+// Stricter BBD rule: the date is REQUIRED (no blanks) and must be a real
+// DD/MM/YYYY. Used on every active batch/bulk BBD on both create and edit.
+export function isRequiredDMY(s: string): boolean {
+  return (s ?? "").trim() !== "" && isValidDMY(s);
+}
+
 // A finished-good batch produced on the work order.
 export interface ProductBatchEntry {
   batch: string;
@@ -146,9 +152,15 @@ export const REPORT_HEADERS = [
  * bulk rows leave those blank so column sums don't double-count. Every row
  * shares the same Report ID and a "1/3"-style Bulk Seq for grouping.
  */
-export function reportToRows(input: ProductionReportInput, w: WastageResult): (string | number)[][] {
-  const ts = new Date().toISOString();
-  const reportId = `${input.workOrder || "WO"}-${Date.now()}`;
+export function reportToRows(
+  input: ProductionReportInput,
+  w: WastageResult,
+  opts?: { reportId?: string; timestamp?: string },
+): (string | number)[][] {
+  // On edit, reuse the report's original timestamp + id so its identity and
+  // chronological position stay stable; on create, generate fresh ones.
+  const ts = opts?.timestamp || new Date().toISOString();
+  const reportId = opts?.reportId || `${input.workOrder || "WO"}-${Date.now()}`;
   const batchesJoined = input.batches.map(b => b.batch).filter(s => s.trim() !== "").join(" | ");
   const bbdsJoined = input.batches.map(b => b.bbd).filter(s => s.trim() !== "").join(" | ");
   const n = input.bulks.length;
