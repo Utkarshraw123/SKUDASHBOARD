@@ -125,9 +125,6 @@ export default async function PlanningPage({
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right whitespace-nowrap">Fill</th>
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right whitespace-nowrap">Qty Planned</th>
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right whitespace-nowrap">Qty Produced</th>
-                  <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium whitespace-nowrap">Batch</th>
-                  <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium whitespace-nowrap">BBD</th>
-                  <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium whitespace-nowrap">Date Completed</th>
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium whitespace-nowrap">Status</th>
                 </tr>
               </thead>
@@ -137,7 +134,7 @@ export default async function PlanningPage({
                     <td className="px-4 py-3 font-mono text-xs text-copper whitespace-nowrap">{r.workOrderNo}</td>
                     <td className="px-4 py-3 font-mono text-xs text-text-muted whitespace-nowrap">{r.bulkCode || "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-text-muted whitespace-nowrap">{r.productCode || "—"}</td>
-                    <td className="px-4 py-3 text-charcoal max-w-[200px] truncate">{r.description}</td>
+                    <td className="px-4 py-3 text-charcoal max-w-[420px] truncate">{r.description}</td>
                     <td className="px-4 py-3 text-text-muted text-xs whitespace-nowrap">{r.plannedWeek || "—"}</td>
                     <td className="px-4 py-3 text-right text-text-muted whitespace-nowrap">{r.fill !== null ? r.fill : "—"}</td>
                     <td className="px-4 py-3 text-right text-charcoal whitespace-nowrap">{r.quantity?.toLocaleString() ?? "—"}</td>
@@ -148,9 +145,6 @@ export default async function PlanningPage({
                         </span>
                       ) : "—"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-text-muted whitespace-nowrap">{r.batch || "—"}</td>
-                    <td className="px-4 py-3 text-xs text-text-muted whitespace-nowrap">{r.bbd || "—"}</td>
-                    <td className="px-4 py-3 text-xs text-text-muted whitespace-nowrap">{r.dateCompleted || "—"}</td>
                     <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={r.status} /></td>
                   </tr>
                 ))}
