@@ -8,14 +8,16 @@ const tabs = [
   { href: "/planning/performance", label: "Performance" },
   { href: "/planning/yield", label: "Yield" },
   { href: "/planning/readiness", label: "Readiness" },
+  { href: "/planning/reports", label: "Reports" },
 ];
 
 export default function InternalProductionTabs() {
   const pathname = usePathname();
 
-  // The Production Report form lives under /planning/report but is a data-entry
-  // form, not one of the four consolidated views — no sub-tab bar there.
-  if (pathname.startsWith("/planning/report")) return null;
+  // The Production Report form lives at /planning/report and is a data-entry
+  // form, not one of the consolidated views — no sub-tab bar there. Use an exact
+  // match so the new /planning/reports register (a real sub-tab) is unaffected.
+  if (pathname === "/planning/report") return null;
 
   return (
     <div className="mb-8 border-b border-[#e4ddd4]">
