@@ -15,9 +15,6 @@ const mainNav = [
 const productionNav = [
   { href: "/production", label: "External Production", icon: "↗" },
   { href: "/planning", label: "Internal Production", icon: "⊞" },
-  { href: "/planning/performance", label: "Production Performance", icon: "◔" },
-  { href: "/planning/yield", label: "Internal Production Yield", icon: "❋" },
-  { href: "/planning/readiness", label: "Production Readiness", icon: "⚑" },
   { href: "/goods-in", label: "Goods In", icon: "⬇" },
   { href: "/packing", label: "Packing Schedule", icon: "⊡" },
   { href: "/purchase-orders", label: "Open Purchase Orders", icon: "≡" },
@@ -43,7 +40,9 @@ export default function Sidebar({ mode }: { mode: MarketMode }) {
   const [showModal, setShowModal] = useState(false);
 
   function NavLink({ href, label, icon }: { href: string; label: string; icon: string }) {
-    const active = pathname === href;
+    // Internal Production owns all /planning/* sub-tabs, so highlight it on any of them.
+    const active =
+      pathname === href || (href === "/planning" && pathname.startsWith("/planning/"));
     return (
       <Link
         href={href}

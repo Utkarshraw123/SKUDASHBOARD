@@ -1,17 +1,11 @@
 import { fetchProductionInput, fetchProductionReports, fetchSkus } from "@/lib/sheets";
 import { computePerformance } from "@/lib/performance";
+import { parseDateDMY } from "@/lib/dates";
 import PerformanceView from "@/components/PerformanceView";
 import FilterBar from "@/components/FilterBar";
 import { Suspense } from "react";
 
 export const revalidate = 300;
-
-function parseDMY(s: string): Date | null {
-  if (!s || !s.trim()) return null;
-  const p = s.trim().split("/");
-  if (p.length === 3) { const d = new Date(`${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`); return isNaN(d.getTime()) ? null : d; }
-  return null;
-}
 
 export default async function PerformancePage({
   searchParams,
@@ -32,7 +26,7 @@ export default async function PerformancePage({
     if (employee && r.employee !== employee) return false;
     if (shift && r.shift !== shift) return false;
     if (dateFrom || dateTo) {
-      const d = parseDMY(r.date);
+      const d = parseDateDMY(r.date);
       if (!d) return false;
       if (dateFrom && d < new Date(dateFrom)) return false;
       if (dateTo && d > new Date(dateTo)) return false;

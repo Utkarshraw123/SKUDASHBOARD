@@ -1,4 +1,5 @@
 import { fetchWNPPlanning } from "@/lib/sheets";
+import { parseDateDMY } from "@/lib/dates";
 import FilterBar from "@/components/FilterBar";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import Link from "next/link";
@@ -16,16 +17,9 @@ function StatusBadge({ status }: { status: "complete" | "in_progress" | "planned
   return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${map[status]}`}>{labels[status]}</span>;
 }
 
-function parseDDMMYYYY(s: string): Date | null {
-  if (!s || s.trim() === "") return null;
-  const parts = s.trim().split("/");
-  if (parts.length === 3) return new Date(`${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}`);
-  return null;
-}
-
 function inDateRange(dateStr: string, from: string, to: string): boolean {
   if (!from && !to) return true;
-  const d = parseDDMMYYYY(dateStr);
+  const d = parseDateDMY(dateStr);
   if (!d) return true;
   if (from && d < new Date(from)) return false;
   if (to && d > new Date(to)) return false;
