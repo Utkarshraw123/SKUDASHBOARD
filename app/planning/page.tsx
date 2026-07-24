@@ -124,7 +124,6 @@ export default async function PlanningPage({
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium whitespace-nowrap">Planned Week</th>
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right whitespace-nowrap">Fill</th>
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right whitespace-nowrap">Qty Planned</th>
-                  <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium text-right whitespace-nowrap">Qty Produced</th>
                   <th className="px-4 py-4 text-xs tracking-widest uppercase text-text-muted font-medium whitespace-nowrap">Status</th>
                 </tr>
               </thead>
@@ -138,13 +137,6 @@ export default async function PlanningPage({
                     <td className="px-4 py-3 text-text-muted text-xs whitespace-nowrap">{r.plannedWeek || "—"}</td>
                     <td className="px-4 py-3 text-right text-text-muted whitespace-nowrap">{r.fill !== null ? r.fill : "—"}</td>
                     <td className="px-4 py-3 text-right text-charcoal whitespace-nowrap">{r.quantity?.toLocaleString() ?? "—"}</td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      {r.quantityProduced !== null ? (
-                        <span className={r.status === "complete" ? "text-emerald-600 font-medium" : "text-charcoal"}>
-                          {r.quantityProduced.toLocaleString()}
-                        </span>
-                      ) : "—"}
-                    </td>
                     <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={r.status} /></td>
                   </tr>
                 ))}
