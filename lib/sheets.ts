@@ -16,6 +16,13 @@ function cleanPct(s: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+// Sum several numeric cells, treating blanks as 0. Returns null only when every
+// cell is blank/non-numeric (so a genuinely empty figure still renders as "—").
+function sumNums(...cells: string[]): number | null {
+  const nums = cells.map(cleanNum).filter((n): n is number => n !== null);
+  return nums.length === 0 ? null : nums.reduce((a, b) => a + b, 0);
+}
+
 async function getSheets() {
   const credJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!credJson) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON env var missing");
@@ -74,10 +81,11 @@ export const fetchSkus = cache(async (): Promise<SkuRow[]> => {
       inventory: cleanNum(r[7]),
       wnpStock: cleanNum(r[8]),
       coverAtWNP: cleanNum(r[9]),
-      externalStock: cleanNum(r[10]),
-      // NOTE: 2 columns ("Extenal Stock EXG" col L, "Stock in Transit to WNP
-      // (WNT)" col M) were inserted into the sheet, shifting everything from
-      // Fill onward right by +2. Indices below reflect the CURRENT layout.
+      // Total external stock = Extenal Stock BCA (col K) + Extenal Stock EXG (col L).
+      externalStock: sumNums(r[10], r[11]),
+      // NOTE: the EXG column (col L) plus "Stock in Transit to WNP (WNT)" (col M)
+      // were inserted into the sheet, shifting everything from Fill onward right
+      // by +2. Indices below reflect the CURRENT layout.
       fill: cleanNum(r[13]),
       monthlyDemandAvg: cleanNum(r[15]),
       monthlyDemandLastQtr: cleanNum(r[16]),
