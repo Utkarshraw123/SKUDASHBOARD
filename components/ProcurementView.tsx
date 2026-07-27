@@ -1,14 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import type { ProcurementPlan, FgPlanRow, BulkPlanRow, RmPlanRow, AncPlanRow, PoRef } from "@/lib/procurement";
+import { useRouter, usePathname } from "next/navigation";
+import type { ProcurementPlan, FgPlanRow, BulkPlanRow, RmPlanRow, AncPlanRow, PoRef, PlanMeta, UnmatchedRow } from "@/lib/procurement";
+import type { OrderActionList } from "@/lib/procurement-actions";
 import ExportCsvButton from "./ExportCsvButton";
 
 // ---------- shared bits ----------
 
 function fmt(n: number, dp = 0) {
   return n.toLocaleString("en-GB", { maximumFractionDigits: dp });
+}
+function coverFmt(w: number) {
+  if (!isFinite(w)) return "—";
+  return w >= 52 ? "52w+" : `${w.toFixed(1)}w`;
 }
 
 function PoList({ pos }: { pos: PoRef[] }) {
@@ -59,338 +64,477 @@ function SectionCard({ title, subtitle, kpis, exportName, children }: {
 const TH = "px-4 py-3 text-[10px] tracking-widest uppercase text-text-muted font-medium text-left whitespace-nowrap";
 const TD = "px-4 py-3 whitespace-nowrap";
 
-// ---------- date picker ----------
+// ================= main view =================
 
-export function CyclePicker({ start, end }: { start: string; end: string }) {
+export default function ProcurementView({
+  plan, orders, start, end, cover, coverCM, perSkuOverrides,
+}: {
+  plan: ProcurementPlan;
+  orders: OrderActionList;
+  start: string; end: string; cover: number; coverCM: number;
+  perSkuOverrides: Record<string, number>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
-  const set = (key: string, value: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(key, value); else params.delete(key);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  };
+  // Local control state — applied together on "Recalculate".
+  const [s, setS] = useState(start);
+  const [e, setE] = useState(end);
+  const [g, setG] = useState(String(cover));
+  const [cm, setCm] = useState(String(coverCM));
+  const [targets, setTargets] = useState<Record<string, number>>({ ...perSkuOverrides });
 
-  const input = "rounded-xl border border-[#e4ddd4] bg-white px-4 py-2.5 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper";
+  function recalc() {
+    const params = new URLSearchParams();
+    params.set("start", s);
+    params.set("end", e);
+    params.set("cover", g || "16");
+    params.set("coverCM", cm || "20");
+    const cov = Object.entries(targets).filter(([, w]) => w > 0).map(([k, w]) => `${k}:${w}`).join(",");
+    if (cov) params.set("cov", cov);
+    router.push(`${pathname}?${params.toString()}`);
+  }
 
-  return (
-    <div className="flex flex-wrap items-end gap-4 bg-white rounded-2xl border border-[#e4ddd4] p-5 mb-8">
-      <div>
-        <label className="block text-[10px] tracking-widest uppercase text-text-muted mb-1.5">Cycle Start</label>
-        <input type="date" value={start} onChange={e => set("start", e.target.value)} className={input} />
-      </div>
-      <div>
-        <label className="block text-[10px] tracking-widest uppercase text-text-muted mb-1.5">Cycle End</label>
-        <input type="date" value={end} onChange={e => set("end", e.target.value)} className={input} />
-      </div>
-      <p className="text-xs text-text-muted pb-2.5">
-        Plan targets 16 weeks cover (20 for Collagen &amp; Magnesium) at cycle end. Committed production and open POs due before cycle end are netted off.
-      </p>
-    </div>
-  );
-}
+  const input = "rounded-xl border border-[#e4ddd4] bg-white px-3 py-2 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper";
+  const label = "block text-[10px] tracking-widest uppercase text-text-muted mb-1.5";
 
-// ---------- FG section ----------
-
-function FgTable({ rows }: { rows: FgPlanRow[] }) {
-  const [open, setOpen] = useState<string | null>(null);
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-cream border-b border-[#e4ddd4]">
-          <tr>
-            <th className={TH}></th>
-            <th className={TH}>SKU</th>
-            <th className={TH}>Description</th>
-            <th className={`${TH} text-right`}>Weekly Demand</th>
-            <th className={`${TH} text-right`}>Stock (FG WHs)</th>
-            <th className={`${TH} text-right`}>Cover Now</th>
-            <th className={`${TH} text-right`}>Target</th>
-            <th className={`${TH} text-right`}>Units to Produce</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => {
-            const isOpen = open === r.skuCode;
-            const noAction = r.unitsToProduce === 0;
-            return (
-              <>
-                <tr key={r.skuCode}
-                    onClick={() => setOpen(isOpen ? null : r.skuCode)}
-                    className={`border-b border-[#e4ddd4]/60 cursor-pointer hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
-                  <td className={TD}><Chevron open={isOpen} /></td>
-                  <td className={`${TD} font-mono text-xs text-copper`}>{r.skuCode}</td>
-                  <td className="px-4 py-3 text-charcoal max-w-[220px] truncate">{r.description}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.weeklyDemand)}</td>
-                  <td className={`${TD} text-right`}>{fmt(r.currentStock)}</td>
-                  <td className={`${TD} text-right ${r.currentCover !== null && r.currentCover < 8 ? "text-red-600 font-medium" : "text-text-muted"}`}>
-                    {r.currentCover !== null ? `${r.currentCover.toFixed(1)}w` : "—"}
-                  </td>
-                  <td className={`${TD} text-right text-text-muted`}>{r.targetCover}w</td>
-                  <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"}`}>
-                    {noAction ? "Covered" : fmt(r.unitsToProduce)}
-                  </td>
-                </tr>
-                {isOpen && (
-                  <tr key={`${r.skuCode}-d`} className="bg-cream/60 border-b border-[#e4ddd4]/60">
-                    <td></td>
-                    <td colSpan={7} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
-                      <p><strong>Calculation:</strong> target stock = {r.targetCover}w × {fmt(r.weeklyDemand)}/w = <strong>{fmt(r.targetStock)}</strong> units at cycle end</p>
-                      <p>Projected stock at cycle end = {fmt(r.currentStock)} stock + {fmt(r.incomingQty)} incoming − demand until then = <strong>{fmt(r.projectedStockAtCycleEnd)}</strong></p>
-                      <p><strong>Units to produce:</strong> {fmt(r.targetStock)} − {fmt(r.projectedStockAtCycleEnd)} = <strong className="text-copper">{fmt(r.unitsToProduce)}</strong>{r.fill !== null && <> (fill {r.fill} → {fmt(r.unitsToProduce * r.fill)} capsules, bulk {r.bulkCode || "—"})</>}</p>
-                      <p><strong>Incoming POs (due ≤ cycle end):</strong> <PoList pos={r.incomingPOs} /></p>
-                    </td>
-                  </tr>
-                )}
-              </>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ---------- Bulk section ----------
-
-function BulkTable({ rows }: { rows: BulkPlanRow[] }) {
-  const [open, setOpen] = useState<string | null>(null);
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-cream border-b border-[#e4ddd4]">
-          <tr>
-            <th className={TH}></th>
-            <th className={TH}>Bulk Code</th>
-            <th className={TH}>Description</th>
-            <th className={`${TH} text-right`}>Capsules Needed</th>
-            <th className={`${TH} text-right`}>Stock</th>
-            <th className={`${TH} text-right`}>On Order</th>
-            <th className={`${TH} text-right`}>Committed Pre-Cycle</th>
-            <th className={`${TH} text-right`}>Capsules to Order</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => {
-            const isOpen = open === r.bulkCode;
-            const noAction = r.capsulesToOrder === 0;
-            return (
-              <>
-                <tr key={r.bulkCode}
-                    onClick={() => setOpen(isOpen ? null : r.bulkCode)}
-                    className={`border-b border-[#e4ddd4]/60 cursor-pointer hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
-                  <td className={TD}><Chevron open={isOpen} /></td>
-                  <td className={`${TD} font-mono text-xs text-copper`}>{r.bulkCode}</td>
-                  <td className="px-4 py-3 text-charcoal max-w-[220px] truncate">{r.description}</td>
-                  <td className={`${TD} text-right`}>{fmt(r.capsulesNeeded)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.stock)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.openPoQty)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.committedCapsules)}</td>
-                  <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"}`}>
-                    {noAction ? "Covered" : fmt(r.capsulesToOrder)}
-                  </td>
-                </tr>
-                {isOpen && (
-                  <tr key={`${r.bulkCode}-d`} className="bg-cream/60 border-b border-[#e4ddd4]/60">
-                    <td></td>
-                    <td colSpan={7} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
-                      <p><strong>Available bulk</strong> = {fmt(r.stock)} stock + {fmt(r.openPoQty)} on order − {fmt(r.committedCapsules)} committed to pre-cycle packing = <strong>{fmt(r.availableBulk)}</strong> capsules</p>
-                      <p><strong>To order:</strong> {fmt(r.capsulesNeeded)} needed − {fmt(r.availableBulk)} available = <strong className="text-copper">{fmt(r.capsulesToOrder)}</strong> capsules</p>
-                      <p><strong>Open POs:</strong> <PoList pos={r.openPOs} /></p>
-                      <p><strong>Driven by:</strong> {r.skus.map(s => `${s.skuCode} (${fmt(s.units)} × ${s.fill})`).join(", ")}</p>
-                    </td>
-                  </tr>
-                )}
-              </>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ---------- RM section ----------
-
-function RmTable({ rows }: { rows: RmPlanRow[] }) {
-  const [open, setOpen] = useState<string | null>(null);
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-cream border-b border-[#e4ddd4]">
-          <tr>
-            <th className={TH}></th>
-            <th className={TH}>RM Code</th>
-            <th className={TH}>Name</th>
-            <th className={`${TH} text-right`}>Kg Needed</th>
-            <th className={`${TH} text-right`}>Excess (WNP+WNC)</th>
-            <th className={`${TH} text-right`}>On Order</th>
-            <th className={`${TH} text-right`}>Net</th>
-            <th className={`${TH} text-right`}>Order (+8%)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => {
-            const isOpen = open === r.code;
-            const noAction = r.orderQty === 0;
-            return (
-              <>
-                <tr key={r.code}
-                    onClick={() => setOpen(isOpen ? null : r.code)}
-                    className={`border-b border-[#e4ddd4]/60 cursor-pointer hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
-                  <td className={TD}><Chevron open={isOpen} /></td>
-                  <td className={`${TD} font-mono text-xs text-copper`}>{r.code}</td>
-                  <td className="px-4 py-3 text-charcoal max-w-[240px] truncate">{r.name}</td>
-                  <td className={`${TD} text-right`}>{fmt(r.kgNeeded, 2)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.excessStock, 2)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.openPoQty, 2)}</td>
-                  <td className={`${TD} text-right`}>{fmt(r.netRequired, 2)}</td>
-                  <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"}`}>
-                    {noAction ? "Covered" : `${fmt(r.orderQty, 2)} kg`}
-                  </td>
-                </tr>
-                {isOpen && (
-                  <tr key={`${r.code}-d`} className="bg-cream/60 border-b border-[#e4ddd4]/60">
-                    <td></td>
-                    <td colSpan={7} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
-                      <p><strong>Net:</strong> {fmt(r.kgNeeded, 2)} kg needed − {fmt(r.excessStock, 2)} excess − {fmt(r.openPoQty, 2)} on order = <strong>{fmt(r.netRequired, 2)} kg</strong>; +8% buffer → <strong className="text-copper">{fmt(r.orderQty, 2)} kg</strong></p>
-                      <p><strong>Open POs:</strong> <PoList pos={r.openPOs} /></p>
-                      <p><strong>Driven by:</strong> {r.usedIn.map(u => `${u.bulkCode} (${fmt(u.kg, 1)} kg)`).join(", ")}</p>
-                    </td>
-                  </tr>
-                )}
-              </>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ---------- Ancillary section ----------
-
-function AncTable({ rows }: { rows: AncPlanRow[] }) {
-  const [open, setOpen] = useState<string | null>(null);
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-cream border-b border-[#e4ddd4]">
-          <tr>
-            <th className={TH}></th>
-            <th className={TH}>Code</th>
-            <th className={TH}>Name</th>
-            <th className={TH}>Type</th>
-            <th className={`${TH} text-right`}>Needed</th>
-            <th className={`${TH} text-right`}>Stock</th>
-            <th className={`${TH} text-right`}>Committed</th>
-            <th className={`${TH} text-right`}>On Order</th>
-            <th className={`${TH} text-right`}>Order (+buffer)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => {
-            const isOpen = open === r.code;
-            const noAction = r.orderQty === 0;
-            return (
-              <>
-                <tr key={r.code}
-                    onClick={() => setOpen(isOpen ? null : r.code)}
-                    className={`border-b border-[#e4ddd4]/60 cursor-pointer hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
-                  <td className={TD}><Chevron open={isOpen} /></td>
-                  <td className={`${TD} font-mono text-xs text-copper`}>{r.code}</td>
-                  <td className="px-4 py-3 text-charcoal max-w-[240px] truncate">{r.name}</td>
-                  <td className={TD}><span className="text-xs bg-purple-100 text-purple-700 rounded-full px-2 py-0.5">{r.type}</span></td>
-                  <td className={`${TD} text-right`}>{fmt(r.unitsNeeded)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.stock)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.committedUsage)}</td>
-                  <td className={`${TD} text-right text-text-muted`}>{fmt(r.openPoQty)}</td>
-                  <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"}`}>
-                    {noAction ? "Covered" : fmt(r.orderQty)}
-                  </td>
-                </tr>
-                {isOpen && (
-                  <tr key={`${r.code}-d`} className="bg-cream/60 border-b border-[#e4ddd4]/60">
-                    <td></td>
-                    <td colSpan={8} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
-                      <p><strong>Available</strong> = max(0, {fmt(r.stock)} stock − {fmt(r.committedUsage)} committed pre-cycle) + {fmt(r.openPoQty)} on order</p>
-                      <p><strong>Order:</strong> {fmt(r.unitsNeeded)} needed − available = {fmt(r.netRequired)} net; +{Math.round(r.buffer * 100)}% buffer → <strong className="text-copper">{fmt(r.orderQty)}</strong></p>
-                      <p><strong>Open POs:</strong> <PoList pos={r.openPOs} /></p>
-                      <p><strong>Driven by:</strong> {r.usedIn.map(u => `${u.skuCode} (${fmt(u.units)})`).join(", ")}</p>
-                    </td>
-                  </tr>
-                )}
-              </>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ---------- main view ----------
-
-export default function ProcurementView({ plan }: { plan: ProcurementPlan }) {
+  const m: PlanMeta = plan.meta;
   const fgToProduce = plan.fg.filter(r => r.unitsToProduce > 0);
-  const totalCaps = plan.bulk.reduce((s, b) => s + b.capsulesToOrder, 0);
-  const rmLines = plan.rm.filter(r => r.orderQty > 0);
-  const ancLines = plan.ancillary.filter(r => r.orderQty > 0);
+  const anyShort = plan.fg.some(r => r.coverShort);
 
   return (
     <div>
+      {/* ---- Control bar ---- */}
+      <div className="bg-white rounded-2xl border border-[#e4ddd4] p-5 mb-6">
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className={label} title="Production planned before the cycle start is treated as committed; parts needed before then should already be on an Open PO or in stock.">Cycle start ⓘ</label>
+            <input type="date" value={s} onChange={ev => setS(ev.target.value)} className={input} />
+          </div>
+          <div>
+            <label className={label}>Cover by (cycle end)</label>
+            <input type="date" value={e} onChange={ev => setE(ev.target.value)} className={input} />
+          </div>
+          <div className="w-28">
+            <label className={label}>Target cover (wks)</label>
+            <input type="number" min={1} value={g} onChange={ev => setG(ev.target.value)} className={input} />
+          </div>
+          <div className="w-40">
+            <label className={label}>Collagen &amp; Mag (wks)</label>
+            <input type="number" min={1} value={cm} onChange={ev => setCm(ev.target.value)} className={input} />
+          </div>
+          <button onClick={recalc} className="bg-copper text-white rounded-xl px-5 py-2.5 text-sm font-medium hover:bg-copper-light transition-colors">
+            Recalculate plan
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-3">
+          Demand &amp; cover come from the WoW weekly forecast. Forecast window: {m.firstForecastWeek ?? "—"} → {m.lastForecastWeek ?? "—"}.
+          Edit a SKU&apos;s target in the Finished Goods table, then Recalculate.
+        </p>
+        {m.outOfRange && (
+          <p className="mt-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5">
+            ⚠ The chosen cycle ({m.cycleStart} → {m.cycleEnd}) is outside the forecast window — no demand found. Pick dates inside {m.firstForecastWeek} → {m.lastForecastWeek}.
+          </p>
+        )}
+        {anyShort && !m.outOfRange && (
+          <p className="mt-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm px-4 py-2.5">
+            ⚠ Some target-cover windows run past the last forecast week ({m.lastForecastWeek}); those targets use the weeks available.
+          </p>
+        )}
+      </div>
+
+      {/* ---- Headline: MAKE ---- */}
       <SectionCard
-        title="1 · Finished Goods (3-codes)"
-        exportName="procurement-finished-goods"
-        subtitle="SKUs below target cover at cycle end — stock summed across E&G, BCA, WNP, WNC. Greyed rows are covered by stock or incoming POs."
+        title="Make — production plan"
+        exportName="mrp-make-production"
+        subtitle={`Produce these finished goods to reach target cover by ${m.cycleEnd}. Built from scratch: supply = current stock + open POs only.`}
         kpis={[
-          { label: "SKUs to Produce", value: String(fgToProduce.length), color: "text-copper" },
-          { label: "Total Units", value: fmt(fgToProduce.reduce((s, r) => s + r.unitsToProduce, 0)) },
-          { label: "Watchlist (covered)", value: String(plan.fg.length - fgToProduce.length) },
-          { label: "Target", value: "16w / 20w" },
+          { label: "SKUs to produce", value: String(fgToProduce.length), color: "text-copper" },
+          { label: "Total units", value: fmt(fgToProduce.reduce((a, r) => a + r.unitsToProduce, 0)) },
+          { label: "SKUs planned", value: String(m.skusPlanned) },
+          { label: "Cycle", value: `${m.cycleStart} → ${m.cycleEnd}` },
         ]}>
-        {plan.fg.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">All SKUs at or above target cover 🎉</p> : <FgTable rows={plan.fg} />}
+        {fgToProduce.length === 0
+          ? <p className="px-5 py-8 text-center text-sm text-text-muted">Nothing to produce — every planned SKU already reaches target cover.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-cream border-b border-[#e4ddd4]"><tr>
+                  <th className={TH}>SKU</th><th className={TH}>Product</th>
+                  <th className={`${TH} text-right`}>Produce (units)</th>
+                  <th className={`${TH} text-right`}>Opening cover</th>
+                  <th className={`${TH} text-right`}>Target</th>
+                  <th className={TH}>Bulk</th>
+                </tr></thead>
+                <tbody>
+                  {fgToProduce.map(r => (
+                    <tr key={r.skuCode} className="border-b border-[#e4ddd4]/60">
+                      <td className={`${TD} font-mono text-xs text-copper`}>{r.skuCode}</td>
+                      <td className="px-4 py-3 text-charcoal max-w-[260px] truncate">{r.description}</td>
+                      <td className={`${TD} text-right font-semibold text-copper`}>{fmt(r.unitsToProduce)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{coverFmt(r.openingCover)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{r.targetCover}w</td>
+                      <td className={`${TD} font-mono text-xs text-text-muted`}>{r.bulkCode || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
       </SectionCard>
 
+      {/* ---- Headline: ORDER ---- */}
       <SectionCard
-        title="2 · Bulk / Capsules (1-codes)"
-        exportName="procurement-bulk"
-        subtitle="Capsule requirement from the production plan, net of stock, open POs and bulk committed to pre-cycle packing."
+        title="Order — purchasing plan"
+        exportName="mrp-order-purchasing"
+        subtitle="What to raise POs for, by supplier — bulk, raw materials and ancillaries needed for the production plan above."
         kpis={[
-          { label: "Bulks to Order", value: String(plan.bulk.filter(b => b.capsulesToOrder > 0).length), color: "text-copper" },
-          { label: "Total Capsules", value: fmt(totalCaps) },
-          { label: "Covered Bulks", value: String(plan.bulk.filter(b => b.capsulesToOrder === 0).length) },
-          { label: "Basis", value: "fill × units" },
+          { label: "Order lines", value: String(orders.summary.totalLines), color: "text-copper" },
+          { label: "Bulk", value: String(orders.summary.bulk) },
+          { label: "RM", value: String(orders.summary.rm) },
+          { label: "Ancillary", value: String(orders.summary.ancillary) },
         ]}>
-        {plan.bulk.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">No bulk requirement for this cycle.</p> : <BulkTable rows={plan.bulk} />}
+        {orders.actions.length === 0
+          ? <p className="px-5 py-8 text-center text-sm text-text-muted">No purchasing needed — stock and open POs cover the plan.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-cream border-b border-[#e4ddd4]"><tr>
+                  <th className={TH}>Supplier</th><th className={TH}>Type</th><th className={TH}>Code</th><th className={TH}>Name</th>
+                  <th className={`${TH} text-right`}>Order</th><th className={TH}>Unit</th>
+                  <th className={`${TH} text-right`}>On order</th><th className={TH}>For</th>
+                </tr></thead>
+                <tbody>
+                  {orders.bySupplier.flatMap(gp => gp.actions.map((a, i) => (
+                    <tr key={`${a.partType}-${a.code}-${i}`} className="border-b border-[#e4ddd4]/60">
+                      <td className={`${TD} text-charcoal`}>{gp.supplier}</td>
+                      <td className={TD}><span className="text-xs bg-cream-dark text-text-muted rounded-full px-2 py-0.5">{a.partType}</span></td>
+                      <td className={`${TD} font-mono text-xs text-copper`}>{a.code}</td>
+                      <td className="px-4 py-3 text-charcoal max-w-[220px] truncate">{a.name}</td>
+                      <td className={`${TD} text-right font-semibold text-copper`}>{fmt(a.qty, 2)}</td>
+                      <td className={`${TD} text-text-muted`}>{a.unit}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{fmt(a.onOrder, 2)}</td>
+                      <td className="px-4 py-3 text-text-muted text-xs max-w-[240px] truncate">{a.note}</td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
+            </div>
+          )}
       </SectionCard>
 
-      <SectionCard
-        title="3 · Raw Materials (2-codes)"
-        exportName="procurement-raw-materials"
-        subtitle="RM explosion of the bulk order via BOM (kg per 1,000 caps), net of WNP+WNC excess stock and open POs. 8% buffer on net."
-        kpis={[
-          { label: "RMs to Order", value: String(rmLines.length), color: "text-copper" },
-          { label: "Total Kg", value: fmt(rmLines.reduce((s, r) => s + r.orderQty, 0), 1) },
-          { label: "Covered RMs", value: String(plan.rm.length - rmLines.length) },
-          { label: "Buffer", value: "8%" },
-        ]}>
-        {plan.rm.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">No raw material requirement for this cycle.</p> : <RmTable rows={plan.rm} />}
-      </SectionCard>
+      {/* ---- Cascade detail ---- */}
+      <h2 className="font-serif text-lg text-charcoal mt-12 mb-4">Cascade detail</h2>
 
-      <SectionCard
-        title="4 · Ancillaries (4-codes)"
-        exportName="procurement-ancillaries"
-        subtitle="Jars, lids, boxes, labels and pouches only. Stock net of committed pre-cycle usage and open POs. Buffers: boxes 5%, others 10%."
-        kpis={[
-          { label: "Lines to Order", value: String(ancLines.length), color: "text-copper" },
-          { label: "Total Units", value: fmt(ancLines.reduce((s, r) => s + r.orderQty, 0)) },
-          { label: "Covered Lines", value: String(plan.ancillary.length - ancLines.length) },
-          { label: "Excluded", value: "Scoops, Shippers" },
-        ]}>
-        {plan.ancillary.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">No ancillary requirement for this cycle.</p> : <AncTable rows={plan.ancillary} />}
-      </SectionCard>
+      <FgSection rows={plan.fg} targets={targets} setTargets={setTargets} />
+      <BulkSection rows={plan.bulk} />
+      <RmSection rows={plan.rm} />
+      <AncSection rows={plan.ancillary} />
+
+      {plan.unmatched.length > 0 && (
+        <SectionCard
+          title="Forecast-only SKUs (not in dashboard)"
+          exportName="mrp-forecast-only"
+          subtitle="These have WoW forecast demand in the cycle but no ALL SKU DASHBOARD record, so stock and parts can't be planned. Add them to the dashboard to include them."
+          kpis={[
+            { label: "SKUs", value: String(plan.unmatched.length), color: "text-amber-600" },
+            { label: "Cycle demand", value: fmt(plan.unmatched.reduce((a, r) => a + r.cycleDemand, 0)) },
+            { label: "Status", value: "Unplanned" },
+            { label: "Action", value: "Add to dashboard" },
+          ]}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-cream border-b border-[#e4ddd4]"><tr>
+                <th className={TH}>SKU</th><th className={TH}>Product (WoW)</th><th className={`${TH} text-right`}>Cycle demand</th>
+              </tr></thead>
+              <tbody>
+                {plan.unmatched.map(r => (
+                  <tr key={r.skuCode} className="border-b border-[#e4ddd4]/60">
+                    <td className={`${TD} font-mono text-xs text-amber-700`}>{r.skuCode}</td>
+                    <td className="px-4 py-3 text-charcoal max-w-[320px] truncate">{r.product || "—"}</td>
+                    <td className={`${TD} text-right`}>{fmt(r.cycleDemand)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SectionCard>
+      )}
     </div>
+  );
+}
+
+// ---------- FG section (editable targets) ----------
+
+function FgSection({ rows, targets, setTargets }: {
+  rows: FgPlanRow[];
+  targets: Record<string, number>;
+  setTargets: (fn: (t: Record<string, number>) => Record<string, number>) => void;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const setTarget = (sku: string, v: string) => {
+    const n = Number(v);
+    setTargets(t => ({ ...t, [sku]: isNaN(n) ? 0 : n }));
+  };
+  return (
+    <SectionCard
+      title="1 · Finished Goods"
+      exportName="procurement-finished-goods"
+      subtitle="Cover from the WoW weekly forecast. Opening cover = projected stock at cycle start. Edit a Target and Recalculate. Greyed rows already reach target."
+      kpis={[
+        { label: "SKUs to produce", value: String(rows.filter(r => r.unitsToProduce > 0).length), color: "text-copper" },
+        { label: "Total units", value: fmt(rows.reduce((a, r) => a + r.unitsToProduce, 0)) },
+        { label: "Watchlist (covered)", value: String(rows.filter(r => r.unitsToProduce === 0).length) },
+        { label: "Basis", value: "WoW forecast" },
+      ]}>
+      {rows.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">No SKUs below target cover for this cycle 🎉</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-cream border-b border-[#e4ddd4]"><tr>
+              <th className={TH}></th><th className={TH}>SKU</th><th className={TH}>Description</th>
+              <th className={`${TH} text-right`}>Current stock</th>
+              <th className={`${TH} text-right`}>Cover now</th>
+              <th className={`${TH} text-right`}>Opening cover</th>
+              <th className={`${TH} text-right`}>Cycle demand</th>
+              <th className={`${TH} text-right`}>Target (wks)</th>
+              <th className={`${TH} text-right`}>Units to produce</th>
+            </tr></thead>
+            <tbody>
+              {rows.map(r => {
+                const isOpen = open === r.skuCode;
+                const noAction = r.unitsToProduce === 0;
+                return (
+                  <FgRow key={r.skuCode} r={r} isOpen={isOpen} noAction={noAction}
+                    value={targets[r.skuCode] ?? r.targetCover}
+                    onToggle={() => setOpen(isOpen ? null : r.skuCode)}
+                    onTarget={v => setTarget(r.skuCode, v)} />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function FgRow({ r, isOpen, noAction, value, onToggle, onTarget }: {
+  r: FgPlanRow; isOpen: boolean; noAction: boolean; value: number;
+  onToggle: () => void; onTarget: (v: string) => void;
+}) {
+  return (
+    <>
+      <tr className={`border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
+        <td className={`${TD} cursor-pointer`} onClick={onToggle}><Chevron open={isOpen} /></td>
+        <td className={`${TD} font-mono text-xs text-copper cursor-pointer`} onClick={onToggle}>{r.skuCode}</td>
+        <td className="px-4 py-3 text-charcoal max-w-[220px] truncate cursor-pointer" onClick={onToggle}>{r.description}</td>
+        <td className={`${TD} text-right`}>{fmt(r.currentStock)}</td>
+        <td className={`${TD} text-right ${r.currentCover < 8 ? "text-red-600 font-medium" : "text-text-muted"}`}>{coverFmt(r.currentCover)}</td>
+        <td className={`${TD} text-right ${r.openingCover < r.targetCover ? "text-amber-600" : "text-text-muted"}`}>{coverFmt(r.openingCover)}</td>
+        <td className={`${TD} text-right text-text-muted`}>{fmt(r.cycleDemand)}</td>
+        <td className={`${TD} text-right`}>
+          <input type="number" min={1} value={value}
+            onChange={ev => onTarget(ev.target.value)} onClick={ev => ev.stopPropagation()}
+            className="w-16 text-right rounded-lg border border-[#e4ddd4] bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper" />
+        </td>
+        <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"} cursor-pointer`} onClick={onToggle}>
+          {noAction ? "Covered" : fmt(r.unitsToProduce)}
+        </td>
+      </tr>
+      {isOpen && (
+        <tr className="bg-cream/60 border-b border-[#e4ddd4]/60">
+          <td></td>
+          <td colSpan={8} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
+            <p><strong>Opening stock @ cycle start</strong> = {fmt(r.currentStock)} current + {fmt(r.incomingQty)} incoming POs − forecast sales before start = <strong>{fmt(r.openingStock)}</strong> ({coverFmt(r.openingCover)} cover)</p>
+            <p><strong>Cycle demand</strong> (WoW forecast) = <strong>{fmt(r.cycleDemand)}</strong> · <strong>Target stock</strong> ({r.targetCover}w forward) = <strong>{fmt(r.targetStock)}</strong>{r.coverShort && <span className="text-amber-600"> (forecast runs out before {r.targetCover}w)</span>}</p>
+            <p><strong>Units to produce</strong> = target {fmt(r.targetStock)} − projected end (opening + POs in cycle − demand) = <strong className="text-copper">{fmt(r.unitsToProduce)}</strong>{r.fill !== null && <> · fill {r.fill} → {fmt(r.unitsToProduce * r.fill)} caps, bulk {r.bulkCode || "—"}</>}</p>
+            <p><strong>Incoming POs:</strong> <PoList pos={r.incomingPOs} /></p>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// ---------- Bulk ----------
+
+function BulkSection({ rows }: { rows: BulkPlanRow[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const totalCaps = rows.reduce((s, b) => s + b.capsulesToOrder, 0);
+  return (
+    <SectionCard
+      title="2 · Bulk / Capsules"
+      exportName="procurement-bulk"
+      subtitle="Capsule requirement from the production plan, net of stock and open POs (bulk POs are in ×1,000 caps)."
+      kpis={[
+        { label: "Bulks to order", value: String(rows.filter(b => b.capsulesToOrder > 0).length), color: "text-copper" },
+        { label: "Total capsules", value: fmt(totalCaps) },
+        { label: "Covered bulks", value: String(rows.filter(b => b.capsulesToOrder === 0).length) },
+        { label: "Basis", value: "fill × units" },
+      ]}>
+      {rows.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">No bulk requirement for this cycle.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-cream border-b border-[#e4ddd4]"><tr>
+              <th className={TH}></th><th className={TH}>Bulk code</th><th className={TH}>Description</th>
+              <th className={`${TH} text-right`}>Capsules needed</th><th className={`${TH} text-right`}>Stock</th>
+              <th className={`${TH} text-right`}>On order</th><th className={`${TH} text-right`}>Capsules to order</th>
+            </tr></thead>
+            <tbody>
+              {rows.map(r => {
+                const isOpen = open === r.bulkCode; const noAction = r.capsulesToOrder === 0;
+                return (
+                  <>
+                    <tr key={r.bulkCode} onClick={() => setOpen(isOpen ? null : r.bulkCode)}
+                      className={`border-b border-[#e4ddd4]/60 cursor-pointer hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
+                      <td className={TD}><Chevron open={isOpen} /></td>
+                      <td className={`${TD} font-mono text-xs text-copper`}>{r.bulkCode}</td>
+                      <td className="px-4 py-3 text-charcoal max-w-[220px] truncate">{r.description}</td>
+                      <td className={`${TD} text-right`}>{fmt(r.capsulesNeeded)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{fmt(r.stock)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{fmt(r.openPoQty)}</td>
+                      <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"}`}>{noAction ? "Covered" : fmt(r.capsulesToOrder)}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr key={`${r.bulkCode}-d`} className="bg-cream/60 border-b border-[#e4ddd4]/60">
+                        <td></td>
+                        <td colSpan={6} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
+                          <p><strong>Available</strong> = {fmt(r.stock)} stock + {fmt(r.openPoQty)} on order = <strong>{fmt(r.availableBulk)}</strong> caps</p>
+                          <p><strong>To order</strong> = {fmt(r.capsulesNeeded)} needed − {fmt(r.availableBulk)} available = <strong className="text-copper">{fmt(r.capsulesToOrder)}</strong> caps</p>
+                          <p><strong>Open POs:</strong> <PoList pos={r.openPOs} /></p>
+                          <p><strong>Driven by:</strong> {r.skus.map(x => `${x.skuCode} (${fmt(x.units)} × ${x.fill})`).join(", ")}</p>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---------- RM ----------
+
+function RmSection({ rows }: { rows: RmPlanRow[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const lines = rows.filter(r => r.orderQty > 0);
+  return (
+    <SectionCard
+      title="3 · Raw Materials"
+      exportName="procurement-raw-materials"
+      subtitle="RM explosion of the bulk order via BOM (kg per 1,000 caps), net of WNP+WNC excess stock and open POs. 8% buffer on net."
+      kpis={[
+        { label: "RMs to order", value: String(lines.length), color: "text-copper" },
+        { label: "Total kg", value: fmt(lines.reduce((s, r) => s + r.orderQty, 0), 1) },
+        { label: "Covered RMs", value: String(rows.length - lines.length) },
+        { label: "Buffer", value: "8%" },
+      ]}>
+      {rows.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">No raw material requirement for this cycle.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-cream border-b border-[#e4ddd4]"><tr>
+              <th className={TH}></th><th className={TH}>RM code</th><th className={TH}>Name</th>
+              <th className={`${TH} text-right`}>Kg needed</th><th className={`${TH} text-right`}>Excess</th>
+              <th className={`${TH} text-right`}>On order</th><th className={`${TH} text-right`}>Net</th><th className={`${TH} text-right`}>Order (+8%)</th>
+            </tr></thead>
+            <tbody>
+              {rows.map(r => {
+                const isOpen = open === r.code; const noAction = r.orderQty === 0;
+                return (
+                  <>
+                    <tr key={r.code} onClick={() => setOpen(isOpen ? null : r.code)}
+                      className={`border-b border-[#e4ddd4]/60 cursor-pointer hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
+                      <td className={TD}><Chevron open={isOpen} /></td>
+                      <td className={`${TD} font-mono text-xs text-copper`}>{r.code}</td>
+                      <td className="px-4 py-3 text-charcoal max-w-[240px] truncate">{r.name}</td>
+                      <td className={`${TD} text-right`}>{fmt(r.kgNeeded, 2)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{fmt(r.excessStock, 2)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{fmt(r.openPoQty, 2)}</td>
+                      <td className={`${TD} text-right`}>{fmt(r.netRequired, 2)}</td>
+                      <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"}`}>{noAction ? "Covered" : `${fmt(r.orderQty, 2)} kg`}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr key={`${r.code}-d`} className="bg-cream/60 border-b border-[#e4ddd4]/60">
+                        <td></td>
+                        <td colSpan={7} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
+                          <p><strong>Net</strong> = {fmt(r.kgNeeded, 2)} kg − {fmt(r.excessStock, 2)} excess − {fmt(r.openPoQty, 2)} on order = <strong>{fmt(r.netRequired, 2)} kg</strong>; +8% → <strong className="text-copper">{fmt(r.orderQty, 2)} kg</strong></p>
+                          <p><strong>Open POs:</strong> <PoList pos={r.openPOs} /></p>
+                          <p><strong>Driven by:</strong> {r.usedIn.map(u => `${u.bulkCode} (${fmt(u.kg, 1)} kg)`).join(", ")}</p>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---------- Ancillary ----------
+
+function AncSection({ rows }: { rows: AncPlanRow[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const lines = rows.filter(r => r.orderQty > 0);
+  return (
+    <SectionCard
+      title="4 · Ancillaries"
+      exportName="procurement-ancillaries"
+      subtitle="Jars, lids, boxes, labels and pouches only. Net of stock and open POs. Buffers: boxes 5%, others 10%."
+      kpis={[
+        { label: "Lines to order", value: String(lines.length), color: "text-copper" },
+        { label: "Total units", value: fmt(lines.reduce((s, r) => s + r.orderQty, 0)) },
+        { label: "Covered lines", value: String(rows.length - lines.length) },
+        { label: "Excluded", value: "Scoops, Shippers" },
+      ]}>
+      {rows.length === 0 ? <p className="px-5 py-8 text-center text-sm text-text-muted">No ancillary requirement for this cycle.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-cream border-b border-[#e4ddd4]"><tr>
+              <th className={TH}></th><th className={TH}>Code</th><th className={TH}>Name</th><th className={TH}>Type</th>
+              <th className={`${TH} text-right`}>Needed</th><th className={`${TH} text-right`}>Stock</th>
+              <th className={`${TH} text-right`}>On order</th><th className={`${TH} text-right`}>Order (+buffer)</th>
+            </tr></thead>
+            <tbody>
+              {rows.map(r => {
+                const isOpen = open === r.code; const noAction = r.orderQty === 0;
+                return (
+                  <>
+                    <tr key={r.code} onClick={() => setOpen(isOpen ? null : r.code)}
+                      className={`border-b border-[#e4ddd4]/60 cursor-pointer hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
+                      <td className={TD}><Chevron open={isOpen} /></td>
+                      <td className={`${TD} font-mono text-xs text-copper`}>{r.code}</td>
+                      <td className="px-4 py-3 text-charcoal max-w-[240px] truncate">{r.name}</td>
+                      <td className={TD}><span className="text-xs bg-purple-100 text-purple-700 rounded-full px-2 py-0.5">{r.type}</span></td>
+                      <td className={`${TD} text-right`}>{fmt(r.unitsNeeded)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{fmt(r.stock)}</td>
+                      <td className={`${TD} text-right text-text-muted`}>{fmt(r.openPoQty)}</td>
+                      <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"}`}>{noAction ? "Covered" : fmt(r.orderQty)}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr key={`${r.code}-d`} className="bg-cream/60 border-b border-[#e4ddd4]/60">
+                        <td></td>
+                        <td colSpan={7} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
+                          <p><strong>Available</strong> = {fmt(r.stock)} stock + {fmt(r.openPoQty)} on order · <strong>Order</strong> = {fmt(r.unitsNeeded)} − available = {fmt(r.netRequired)} net; +{Math.round(r.buffer * 100)}% → <strong className="text-copper">{fmt(r.orderQty)}</strong></p>
+                          <p><strong>Open POs:</strong> <PoList pos={r.openPOs} /></p>
+                          <p><strong>Driven by:</strong> {r.usedIn.map(u => `${u.skuCode} (${fmt(u.units)})`).join(", ")}</p>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
   );
 }

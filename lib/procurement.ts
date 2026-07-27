@@ -1,13 +1,11 @@
 import type { SkuRow, ProductionRow, PlanningRow, BulkPoRow, PackingRow, BomSheet } from "./types";
-import type { InventoryRow } from "./sheets";
+import type { InventoryRow, WowDemand } from "./sheets";
 
 // ---- Config ----------------------------------------------------------------
 
-const FG_WAREHOUSES = ["EXG", "BCA", "WNP", "WNC"]; // finished goods stock
 const RM_WAREHOUSES = ["WNP", "WNC"]; // raw material excess stock
-const WEEKS_PER_MONTH = 4.33;
 const DEFAULT_TARGET_COVER = 16;
-const HIGH_TARGET_COVER = 20; // collagen & magnesium
+const HIGH_TARGET_COVER = 20; // collagen & magnesium default
 
 const RM_BUFFER = 0.08;
 // ancillary buffers by keyword; only these types are planned
@@ -32,25 +30,26 @@ export interface FgPlanRow {
   description: string;
   bulkCode: string;
   fill: number | null;
-  weeklyDemand: number;
-  currentStock: number;
-  currentCover: number | null;
-  targetCover: number;
-  incomingPOs: PoRef[];
+  targetCover: number;        // N weeks (resolved: per-SKU > collagen/mag > global)
+  currentStock: number;       // ALL SKU DASHBOARD current inventory
+  currentCover: number;       // weeks of forward cover from today (from WoW forecast)
+  openingStock: number;       // projected stock at cycle start (S0)
+  openingCover: number;       // weeks of forward cover at cycle start
+  cycleDemand: number;        // Σ weekly forecast within the cycle
+  incomingPOs: PoRef[];       // open POs due today..cycle end
   incomingQty: number;
-  projectedStockAtCycleEnd: number;
-  targetStock: number;
+  targetStock: number;        // Σ next N weeks' forecast after cycle end
+  coverShort: boolean;        // forward cover ran past the last forecast week
   unitsToProduce: number;
 }
 
 export interface BulkPlanRow {
   bulkCode: string;
   description: string;
-  capsulesNeeded: number; // for the cycle production plan
+  capsulesNeeded: number;
   stock: number;
   openPOs: PoRef[];
   openPoQty: number;
-  committedCapsules: number; // consumed by packing orders before cycle start
   availableBulk: number;
   capsulesToOrder: number;
   skus: { skuCode: string; units: number; fill: number }[];
@@ -64,7 +63,7 @@ export interface RmPlanRow {
   openPOs: PoRef[];
   openPoQty: number;
   netRequired: number;
-  orderQty: number; // with buffer
+  orderQty: number;
   usedIn: { bulkCode: string; kg: number }[];
 }
 
@@ -75,7 +74,6 @@ export interface AncPlanRow {
   buffer: number;
   unitsNeeded: number;
   stock: number;
-  committedUsage: number;
   openPOs: PoRef[];
   openPoQty: number;
   netRequired: number;
@@ -83,11 +81,30 @@ export interface AncPlanRow {
   usedIn: { skuCode: string; units: number }[];
 }
 
+export interface UnmatchedRow {
+  skuCode: string;
+  product: string;
+  cycleDemand: number;   // forecast demand in the cycle (can't plan — not in dashboard)
+}
+
+export interface PlanMeta {
+  cycleStart: string;    // ISO
+  cycleEnd: string;      // ISO
+  firstForecastWeek: string | null;
+  lastForecastWeek: string | null;
+  outOfRange: boolean;   // cycle falls (partly) outside the forecast grid
+  globalCover: number;
+  cmCover: number;
+  skusPlanned: number;
+}
+
 export interface ProcurementPlan {
   fg: FgPlanRow[];
   bulk: BulkPlanRow[];
   rm: RmPlanRow[];
   ancillary: AncPlanRow[];
+  unmatched: UnmatchedRow[];
+  meta: PlanMeta;
 }
 
 // ---- Helpers ---------------------------------------------------------------
@@ -96,16 +113,10 @@ function parseDMY(s: string): Date | null {
   if (!s || !s.trim()) return null;
   const p = s.trim().split("/");
   if (p.length === 3) {
-    const d = new Date(`${p[2]}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`);
+    const d = new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
     return isNaN(d.getTime()) ? null : d;
   }
   return null;
-}
-
-function inWindow(dateStr: string, from: Date, to: Date): boolean {
-  const d = parseDMY(dateStr);
-  if (!d) return false;
-  return d >= from && d <= to;
 }
 
 function sumStock(inv: InventoryRow[], part: string, warehouses: string[]): number {
@@ -129,112 +140,131 @@ function ancillaryType(name: string): { label: string; buffer: number } | null {
   return null;
 }
 
+// Sum a weekly series over an inclusive index range (clamped to the array).
+function rangeSum(series: number[], a: number, b: number): number {
+  let t = 0;
+  const lo = Math.max(0, a), hi = Math.min(series.length - 1, b);
+  for (let i = lo; i <= hi; i++) t += series[i] ?? 0;
+  return t;
+}
+
+// Weeks of forward cover a given stock buys from `startIdx`, walking the forecast.
+// Zero-demand weeks count as covered; a partial final week contributes a fraction.
+function coverWeeks(series: number[], startIdx: number, stock: number): number {
+  let remaining = stock, w = 0;
+  for (let i = Math.max(0, startIdx); i < series.length; i++) {
+    const d = series[i] ?? 0;
+    if (d <= 0) { w += 1; continue; }
+    if (remaining >= d) { remaining -= d; w += 1; }
+    else { w += remaining / d; return w; }
+  }
+  return w; // stock outlasts the forecast horizon
+}
+
 // ---- Main ------------------------------------------------------------------
 
 export function computePlan(inputs: {
   skus: SkuRow[];
   inventory: InventoryRow[];
-  production: ProductionRow[]; // New Production Master
-  planning: PlanningRow[]; // WNP planning
-  bulkPOs: BulkPoRow[]; // Open Purchase Orders
-  packing: PackingRow[]; // Packing Schedule
+  production: ProductionRow[];
+  bulkPOs: BulkPoRow[];
   rmBom: BomSheet;
   ancBom: BomSheet;
+  wow: WowDemand;
   cycleStart: Date;
   cycleEnd: Date;
+  globalCover: number;
+  cmCover: number;
+  perSku: Record<string, number>;
   today?: Date;
 }): ProcurementPlan {
-  const { skus, inventory, production, planning, bulkPOs, packing, rmBom, ancBom, cycleStart, cycleEnd } = inputs;
+  const { skus, inventory, production, bulkPOs, rmBom, ancBom, wow, cycleStart, cycleEnd } = inputs;
+  const globalCover = inputs.globalCover > 0 ? inputs.globalCover : DEFAULT_TARGET_COVER;
+  const cmCover = inputs.cmCover > 0 ? inputs.cmCover : HIGH_TARGET_COVER;
+  const perSku = inputs.perSku ?? {};
   const today = inputs.today ?? new Date();
   today.setHours(0, 0, 0, 0);
 
-  const weeksUntilCycleEnd = Math.max(0, (cycleEnd.getTime() - today.getTime()) / (7 * 86400000));
+  // --- Week index helpers over the WoW grid --------------------------------
+  const weekDates = wow.weeks.map(w => w.date);
+  const nWeeks = weekDates.length;
+  const idxOnOrAfter = (d: Date) => { const i = weekDates.findIndex(w => w >= d); return i < 0 ? nWeeks : i; };
+  const idxOnOrBefore = (d: Date) => { let i = -1; for (let k = 0; k < nWeeks; k++) if (weekDates[k] <= d) i = k; return i; };
 
-  // --- Open PO helpers (only POs due on/before cycle end count) -------------
-  // From Open Purchase Orders sheet
+  const todayIdx = idxOnOrAfter(today);
+  const startIdx = idxOnOrAfter(cycleStart);
+  const endIdx = idxOnOrBefore(cycleEnd);
+  const outOfRange = nWeeks === 0 || startIdx >= nWeeks || endIdx < 0 || startIdx > endIdx;
+
+  // --- Open PO helper (POs due today..cycle end) ---------------------------
   const openPoFor = (part: string): PoRef[] => {
     const fromBulkSheet = bulkPOs
-      .filter(p => p.partNumber === part && p.orderQuantity !== null && inWindow(p.dueDate, today, cycleEnd))
+      .filter(p => p.partNumber === part && p.orderQuantity !== null)
       .map(p => ({ po: p.order, qty: p.orderQuantity!, dueDate: p.dueDate }));
-    // From New Production Master: open external orders (remaining qty)
     const fromProduction = production
-      .filter(p => p.partNumber === part && p.status !== "complete" && p.quantity !== null && inWindow(p.dueDate, today, cycleEnd))
+      .filter(p => p.partNumber === part && p.status !== "complete" && p.quantity !== null)
       .map(p => ({ po: p.order, qty: (p.quantity ?? 0) - (p.received ?? 0), dueDate: p.dueDate }))
       .filter(p => p.qty > 0);
-    // de-dup by PO number (same PO may appear in both sheets)
     const seen = new Set<string>();
     const all: PoRef[] = [];
     for (const p of [...fromBulkSheet, ...fromProduction]) {
+      const d = parseDMY(p.dueDate);
+      if (!d || d < today || d > cycleEnd) continue; // only POs landing today..cycle end
       const key = `${p.po}-${p.qty}`;
       if (!seen.has(key)) { seen.add(key); all.push(p); }
     }
     return all;
   };
+  const poQtyBefore = (pos: PoRef[], cut: Date) =>
+    pos.reduce((t, p) => { const d = parseDMY(p.dueDate); return d && d <= cut ? t + p.qty : t; }, 0);
+  const poQtyBetween = (pos: PoRef[], lo: Date, hi: Date) =>
+    pos.reduce((t, p) => { const d = parseDMY(p.dueDate); return d && d > lo && d <= hi ? t + p.qty : t; }, 0);
 
-  // --- 1. Finished Goods ------------------------------------------------------
+  const skuByCode = new Map(skus.map(s => [s.skuCode, s]));
+
+  // --- 1. Finished Goods (from WoW forecast) -------------------------------
   const fg: FgPlanRow[] = [];
-  for (const s of skus) {
-    if (!s.skuCode.startsWith("3")) continue;
-    const weeklyDemand = (s.monthlyDemandAvg ?? 0) / WEEKS_PER_MONTH;
-    if (weeklyDemand <= 0) continue;
+  const unmatched: UnmatchedRow[] = [];
 
-    const stock = sumStock(inventory, s.skuCode, FG_WAREHOUSES);
-    const incomingPOs = openPoFor(s.skuCode);
-    const incomingQty = incomingPOs.reduce((t, p) => t + p.qty, 0);
-    const targetCover = isHighTarget(s.description) ? HIGH_TARGET_COVER : DEFAULT_TARGET_COVER;
+  for (const [skuCode, series] of Array.from(wow.demandBySku.entries())) {
+    const cycleDemand = outOfRange ? 0 : rangeSum(series, startIdx, endIdx);
+    const sku = skuByCode.get(skuCode);
+    if (!sku) {
+      // Forecast-only SKU: has demand but no dashboard record → can't plan parts.
+      if (cycleDemand > 0) unmatched.push({ skuCode, product: wow.nameBySku.get(skuCode) ?? "", cycleDemand });
+      continue;
+    }
 
-    const projectedStockAtCycleEnd = stock + incomingQty - weeklyDemand * weeksUntilCycleEnd;
-    const targetStock = targetCover * weeklyDemand;
-    const unitsToProduce = Math.max(0, Math.ceil(targetStock - projectedStockAtCycleEnd));
+    const N = perSku[skuCode] ?? (isHighTarget(sku.description) ? cmCover : globalCover);
+    const currentStock = sku.inventory ?? 0;
+    const pos = openPoFor(skuCode);
+    const posBeforeStart = poQtyBefore(pos, cycleStart);
+    const posInCycle = poQtyBetween(pos, cycleStart, cycleEnd);
+    const incomingQty = pos.reduce((t, p) => t + p.qty, 0);
 
-    const currentCover = weeklyDemand > 0 ? stock / weeklyDemand : null;
+    const salesToStart = outOfRange ? 0 : rangeSum(series, todayIdx, startIdx - 1);
+    const openingStock = Math.max(0, currentStock + posBeforeStart - salesToStart);
+    const targetStock = outOfRange ? 0 : rangeSum(series, endIdx + 1, endIdx + N);
+    const coverShort = !outOfRange && endIdx + N >= nWeeks;
+    const projectedEnd = openingStock + posInCycle - cycleDemand;
+    const unitsToProduce = Math.max(0, Math.ceil(targetStock - projectedEnd));
 
-    // include row if action needed OR cover currently below target (visibility)
-    if (unitsToProduce > 0 || (currentCover !== null && currentCover < targetCover)) {
+    const currentCover = coverWeeks(series, todayIdx, currentStock);
+    const openingCover = coverWeeks(series, startIdx, openingStock);
+
+    // Show a row if there's something to make, or opening cover is short of target.
+    if (unitsToProduce > 0 || openingCover < N) {
       fg.push({
-        skuCode: s.skuCode,
-        description: s.description,
-        bulkCode: s.bulk,
-        fill: s.fill,
-        weeklyDemand,
-        currentStock: stock,
-        currentCover,
-        targetCover,
-        incomingPOs,
-        incomingQty,
-        projectedStockAtCycleEnd,
-        targetStock,
-        unitsToProduce,
+        skuCode, description: sku.description, bulkCode: sku.bulk, fill: sku.fill,
+        targetCover: N, currentStock, currentCover, openingStock, openingCover,
+        cycleDemand, incomingPOs: pos, incomingQty, targetStock, coverShort, unitsToProduce,
       });
     }
   }
   fg.sort((a, b) => b.unitsToProduce - a.unitsToProduce);
+  unmatched.sort((a, b) => b.cycleDemand - a.cycleDemand);
 
-  // --- 2. Bulk / Capsules -----------------------------------------------------
-  // committed 3-code production between today and cycle start (packing schedule + WNP planning)
-  const skuByCode = new Map(skus.map(s => [s.skuCode, s]));
-
-  const committedFg = new Map<string, number>(); // skuCode -> units planned before cycle start
-  for (const p of packing) {
-    if (!p.partNumber.startsWith("3") || p.balance === null) continue;
-    if (!inWindow(p.dueDate, today, cycleStart)) continue;
-    committedFg.set(p.partNumber, (committedFg.get(p.partNumber) ?? 0) + p.balance);
-  }
-  for (const p of planning) {
-    if (p.status === "complete" || !p.productCode.startsWith("3") || p.quantity === null) continue;
-    const d = parseDMY(p.plannedWeek);
-    if (!d || d < today || d > cycleStart) continue;
-    committedFg.set(p.productCode, (committedFg.get(p.productCode) ?? 0) + p.quantity);
-  }
-
-  // committed capsule consumption grouped by bulk code
-  const committedCapsByBulk = new Map<string, number>();
-  committedFg.forEach((units, skuCode) => {
-    const sku = skuByCode.get(skuCode);
-    if (!sku || !sku.bulk || sku.fill === null) return;
-    committedCapsByBulk.set(sku.bulk, (committedCapsByBulk.get(sku.bulk) ?? 0) + units * sku.fill);
-  });
-
+  // --- 2. Bulk / Capsules (supply = stock + open POs; no manual netting) ----
   const bulkMap = new Map<string, BulkPlanRow>();
   for (const row of fg) {
     if (!row.bulkCode || row.fill === null || row.unitsToProduce <= 0) continue;
@@ -243,26 +273,17 @@ export function computePlan(inputs: {
     if (!b) {
       const stock = sumStockAll(inventory, row.bulkCode);
       const openPOs = openPoFor(row.bulkCode);
-      const openPoQty = openPOs.reduce((t, p) => t + p.qty, 0) * 1000; // bulk POs are in units of 1,000 caps
-      const committed = committedCapsByBulk.get(row.bulkCode) ?? 0;
+      const openPoQty = openPOs.reduce((t, p) => t + p.qty, 0) * 1000; // bulk POs in ×1,000 caps
       b = {
-        bulkCode: row.bulkCode,
-        description: "",
-        capsulesNeeded: 0,
-        stock,
-        openPOs,
-        openPoQty,
-        committedCapsules: committed,
-        availableBulk: Math.max(0, stock + openPoQty - committed),
-        capsulesToOrder: 0,
-        skus: [],
+        bulkCode: row.bulkCode, description: "", capsulesNeeded: 0, stock,
+        openPOs, openPoQty, availableBulk: Math.max(0, stock + openPoQty),
+        capsulesToOrder: 0, skus: [],
       };
       bulkMap.set(row.bulkCode, b);
     }
     b.capsulesNeeded += caps;
     b.skus.push({ skuCode: row.skuCode, units: row.unitsToProduce, fill: row.fill });
   }
-  // bulk descriptions from inventory
   for (const b of Array.from(bulkMap.values())) {
     const invRow = inventory.find(r => r.partNumber === b.bulkCode);
     b.description = invRow?.description ?? "";
@@ -270,7 +291,7 @@ export function computePlan(inputs: {
   }
   const bulk = Array.from(bulkMap.values()).sort((a, b) => b.capsulesToOrder - a.capsulesToOrder);
 
-  // --- 3. Raw Materials ---------------------------------------------------------
+  // --- 3. Raw Materials ----------------------------------------------------
   const rmMap = new Map<string, RmPlanRow>();
   for (const b of bulk) {
     if (b.capsulesToOrder <= 0) continue;
@@ -283,17 +304,7 @@ export function computePlan(inputs: {
         const excessStock = sumStock(inventory, comp.code, RM_WAREHOUSES);
         const openPOs = openPoFor(comp.code);
         const openPoQty = openPOs.reduce((t, p) => t + p.qty, 0);
-        r = {
-          code: comp.code,
-          name: comp.name,
-          kgNeeded: 0,
-          excessStock,
-          openPOs,
-          openPoQty,
-          netRequired: 0,
-          orderQty: 0,
-          usedIn: [],
-        };
+        r = { code: comp.code, name: comp.name, kgNeeded: 0, excessStock, openPOs, openPoQty, netRequired: 0, orderQty: 0, usedIn: [] };
         rmMap.set(comp.code, r);
       }
       r.kgNeeded += kg;
@@ -306,17 +317,7 @@ export function computePlan(inputs: {
   }
   const rm = Array.from(rmMap.values()).sort((a, b) => b.orderQty - a.orderQty);
 
-  // --- 4. Ancillaries -------------------------------------------------------------
-  // committed ancillary usage: committed FG production before cycle start × ancillary BOM
-  const committedAncUsage = new Map<string, number>();
-  committedFg.forEach((units, skuCode) => {
-    const product = ancBom.products.find(p => p.code === skuCode);
-    if (!product) return;
-    for (const comp of product.components) {
-      committedAncUsage.set(comp.code, (committedAncUsage.get(comp.code) ?? 0) + units * comp.qty);
-    }
-  });
-
+  // --- 4. Ancillaries (supply = stock + open POs; no manual netting) -------
   const ancMap = new Map<string, AncPlanRow>();
   for (const row of fg) {
     if (row.unitsToProduce <= 0) continue;
@@ -324,28 +325,14 @@ export function computePlan(inputs: {
     if (!product) continue;
     for (const comp of product.components) {
       const t = ancillaryType(comp.name);
-      if (!t) continue; // skip scoops, shippers, anything unmatched
+      if (!t) continue;
       const units = row.unitsToProduce * comp.qty;
       let a = ancMap.get(comp.code);
       if (!a) {
         const stock = sumStockAll(inventory, comp.code);
-        const committedUsage = committedAncUsage.get(comp.code) ?? 0;
         const openPOs = openPoFor(comp.code);
         const openPoQty = openPOs.reduce((tt, p) => tt + p.qty, 0);
-        a = {
-          code: comp.code,
-          name: comp.name,
-          type: t.label,
-          buffer: t.buffer,
-          unitsNeeded: 0,
-          stock,
-          committedUsage,
-          openPOs,
-          openPoQty,
-          netRequired: 0,
-          orderQty: 0,
-          usedIn: [],
-        };
+        a = { code: comp.code, name: comp.name, type: t.label, buffer: t.buffer, unitsNeeded: 0, stock, openPOs, openPoQty, netRequired: 0, orderQty: 0, usedIn: [] };
         ancMap.set(comp.code, a);
       }
       a.unitsNeeded += units;
@@ -353,11 +340,21 @@ export function computePlan(inputs: {
     }
   }
   for (const a of Array.from(ancMap.values())) {
-    const available = Math.max(0, a.stock - a.committedUsage) + a.openPoQty;
+    const available = a.stock + a.openPoQty;
     a.netRequired = Math.max(0, a.unitsNeeded - available);
     a.orderQty = a.netRequired > 0 ? Math.ceil(a.netRequired * (1 + a.buffer)) : 0;
   }
   const ancillary = Array.from(ancMap.values()).sort((a, b) => b.orderQty - a.orderQty);
 
-  return { fg, bulk, rm, ancillary };
+  const meta: PlanMeta = {
+    cycleStart: cycleStart.toISOString().slice(0, 10),
+    cycleEnd: cycleEnd.toISOString().slice(0, 10),
+    firstForecastWeek: wow.weeks[0]?.iso ?? null,
+    lastForecastWeek: wow.weeks[nWeeks - 1]?.iso ?? null,
+    outOfRange,
+    globalCover, cmCover,
+    skusPlanned: fg.length,
+  };
+
+  return { fg, bulk, rm, ancillary, unmatched, meta };
 }

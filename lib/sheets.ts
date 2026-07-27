@@ -341,6 +341,76 @@ export const fetchAncillaryBom = cache(async (): Promise<BomSheet> => {
   return parseBomMatrix(rows, "ancillary");
 });
 
+// --- WoW Demand: the week-by-week forecast that drives the MRP planner ---------
+const WOW_SHEET_ID = "19uHzvIjKYpZPh1YO8HLhjX_YNDNNDhiedOCjYPbFBE8";
+
+export interface WowWeek { iso: string; date: Date }
+export interface WowDemand {
+  weeks: WowWeek[];                      // week-commencing, chronological (col C..EH)
+  demandBySku: Map<string, number[]>;    // skuCode -> units per week, aligned to weeks[]
+  nameBySku: Map<string, string>;        // skuCode -> product name (col B)
+}
+
+function parseDMYDate(s: string): Date | null {
+  if (!s || !s.trim()) return null;
+  const p = s.trim().split("/");
+  if (p.length !== 3) return null;
+  const d = new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Local YYYY-MM-DD (avoids the UTC off-by-one that toISOString gives for
+// dates built from local Y/M/D components).
+function ymdLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Read the WoW Demand tab: row 2 = week-commencing dates from col C; the finished-
+// goods forecast lives in the LAST contiguous run of 3-code rows (rows ~172+). The
+// upper block is an older duplicate; the lower block is the baseline truth. Column C
+// in the lower block is a "1" flag, but demand aligns directly to the row-2 dates, so
+// we index purely by the header dates.
+export const fetchWowDemand = cache(async (): Promise<WowDemand> => {
+  const rows = await cachedValues(WOW_SHEET_ID, "WoW Demand!A2:EH400");
+  if (rows.length === 0) return { weeks: [], demandBySku: new Map(), nameBySku: new Map() };
+
+  const header = rows[0] ?? [];
+  // week columns start at index 2 (col C); keep only cells that parse as a date
+  const weekCols: { col: number; week: WowWeek }[] = [];
+  for (let c = 2; c < header.length; c++) {
+    const d = parseDMYDate(String(header[c] ?? ""));
+    if (d) weekCols.push({ col: c, week: { iso: ymdLocal(d), date: d } });
+  }
+  const weeks = weekCols.map(w => w.week);
+
+  // Find contiguous runs of 3-code rows (data starts at row 3 = index 1 here).
+  const isSku = (v: string) => /^3\d{7}/.test((v ?? "").trim());
+  const body = rows.slice(1);
+  const runs: { start: number; end: number }[] = [];
+  let runStart = -1;
+  for (let i = 0; i < body.length; i++) {
+    const hit = isSku(String(body[i]?.[0] ?? ""));
+    if (hit && runStart < 0) runStart = i;
+    if (!hit && runStart >= 0) { runs.push({ start: runStart, end: i - 1 }); runStart = -1; }
+  }
+  if (runStart >= 0) runs.push({ start: runStart, end: body.length - 1 });
+  const block = runs[runs.length - 1]; // the lower/baseline block
+
+  const demandBySku = new Map<string, number[]>();
+  const nameBySku = new Map<string, string>();
+  if (block) {
+    for (let i = block.start; i <= block.end; i++) {
+      const r = body[i] ?? [];
+      const code = String(r[0] ?? "").trim();
+      if (!isSku(code)) continue;
+      const series = weekCols.map(({ col }) => cleanNum(String(r[col] ?? "")) ?? 0);
+      demandBySku.set(code, series);
+      nameBySku.set(code, String(r[1] ?? "").trim());
+    }
+  }
+  return { weeks, demandBySku, nameBySku };
+});
+
 const PRODUCTION_INPUT_SHEET_ID = "1NnS9fg1mFxnWljbjUUXG9701mUPbvrVyiZ2Lbo2Hplw";
 
 export interface ProductionInputRow {
