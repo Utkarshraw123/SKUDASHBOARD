@@ -57,7 +57,7 @@ export const fetchSkus = cache(async (): Promise<SkuRow[]> => {
   const sheetId = process.env.SHEET_ID;
   if (!sheetId) throw new Error("SHEET_ID env var missing");
 
-  const rows = await cachedValues(sheetId, "ALL SKU DASHBOARD!A1:AX200");
+  const rows = await cachedValues(sheetId, "ALL SKU DASHBOARD!A1:BA200");
   // Skip first 2 header rows
   const dataRows = rows.slice(2);
 
@@ -75,37 +75,40 @@ export const fetchSkus = cache(async (): Promise<SkuRow[]> => {
       wnpStock: cleanNum(r[8]),
       coverAtWNP: cleanNum(r[9]),
       externalStock: cleanNum(r[10]),
-      fill: cleanNum(r[11]),
-      monthlyDemandAvg: cleanNum(r[13]),
-      monthlyDemandLastQtr: cleanNum(r[14]),
-      salesVariance: cleanPct(r[15]),
-      potentialFGWNC: cleanNum(r[17]),
-      bulkAtWNC: r[18] ?? "",
-      totalPotentialUnits: cleanNum(r[19]),
-      totalWeeksCover: cleanNum(r[20]),
-      weeksOver: cleanNum(r[21]),
-      potentialUnitsOther: cleanNum(r[23]),
-      weeksOverOther: cleanNum(r[24]),
-      bulkAtOther: r[25] ?? "",
-      nextBulkDelivery: r[27] ?? "",
-      bulkDeliveryQty: cleanNum(r[28]),
-      bulkPotentialUnits: cleanNum(r[29]),
-      bulkETA: r[30] ?? "",
-      bulkPlannedQty: r[31] ?? "",
-      packerVendor: r[32] ?? "",
-      totalPlannedTs: cleanNum(r[33]),
-      nextPackingDelivery: r[35] ?? "",
-      packingDeliveryQty: cleanNum(r[36]),
-      packingETA: r[37] ?? "",
-      packingSplitSKUs: r[38] ?? "",
-      packingVendor: r[39] ?? "",
-      totalPackingPlanned: cleanNum(r[40]),
-      unitsToBePlanned: cleanNum(r[42]),
-      unitsNotPlanned: cleanNum(r[43]),
-      projectedCover: cleanNum(r[44]),
-      demand12Week: cleanNum(r[46]),
-      demand3Month: cleanNum(r[47]),
-      demand16WeekCover: cleanNum(r[48]),
+      // NOTE: 2 columns ("Extenal Stock EXG" col L, "Stock in Transit to WNP
+      // (WNT)" col M) were inserted into the sheet, shifting everything from
+      // Fill onward right by +2. Indices below reflect the CURRENT layout.
+      fill: cleanNum(r[13]),
+      monthlyDemandAvg: cleanNum(r[15]),
+      monthlyDemandLastQtr: cleanNum(r[16]),
+      salesVariance: cleanPct(r[17]),
+      potentialFGWNC: cleanNum(r[19]),
+      bulkAtWNC: r[20] ?? "",
+      totalPotentialUnits: cleanNum(r[21]),
+      totalWeeksCover: cleanNum(r[22]),
+      weeksOver: cleanNum(r[23]),
+      potentialUnitsOther: cleanNum(r[25]),
+      weeksOverOther: cleanNum(r[26]),
+      bulkAtOther: r[27] ?? "",
+      nextBulkDelivery: r[29] ?? "",
+      bulkDeliveryQty: cleanNum(r[30]),
+      bulkPotentialUnits: cleanNum(r[31]),
+      bulkETA: r[32] ?? "",
+      bulkPlannedQty: r[33] ?? "",
+      packerVendor: r[34] ?? "",
+      totalPlannedTs: cleanNum(r[35]),
+      nextPackingDelivery: r[37] ?? "",
+      packingDeliveryQty: cleanNum(r[38]),
+      packingETA: r[39] ?? "",
+      packingSplitSKUs: r[40] ?? "",
+      packingVendor: r[41] ?? "",
+      totalPackingPlanned: cleanNum(r[42]),
+      unitsToBePlanned: cleanNum(r[44]),
+      unitsNotPlanned: cleanNum(r[45]),
+      projectedCover: cleanNum(r[46]),
+      demand12Week: cleanNum(r[48]),
+      demand3Month: cleanNum(r[49]),
+      demand16WeekCover: cleanNum(r[50]),
     }));
 });
 
