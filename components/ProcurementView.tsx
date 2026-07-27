@@ -116,11 +116,11 @@ export default function ProcurementView({
             <input type="date" value={e} onChange={ev => setE(ev.target.value)} className={input} />
           </div>
           <div className="w-28">
-            <label className={label}>Target cover (wks)</label>
+            <label className={label} title="Weeks of forward forecast to hold in stock at cycle end (default 16). Opening stock already accounts for planned packing before the cycle.">Target cover (wks) ⓘ</label>
             <input type="number" min={1} value={g} onChange={ev => setG(ev.target.value)} className={input} />
           </div>
           <div className="w-40">
-            <label className={label}>Collagen &amp; Mag (wks)</label>
+            <label className={label} title="Higher target cover for Collagen &amp; Magnesium (default 20).">Collagen &amp; Mag (wks) ⓘ</label>
             <input type="number" min={1} value={cm} onChange={ev => setCm(ev.target.value)} className={input} />
           </div>
           <button onClick={recalc} className="bg-copper text-white rounded-xl px-5 py-2.5 text-sm font-medium hover:bg-copper-light transition-colors">
@@ -345,10 +345,10 @@ function FgRow({ r, isOpen, noAction, value, onToggle, onTarget }: {
         <tr className="bg-cream/60 border-b border-[#e4ddd4]/60">
           <td></td>
           <td colSpan={8} className="px-4 py-4 text-xs text-charcoal space-y-1.5">
-            <p><strong>Opening stock @ cycle start</strong> = {fmt(r.currentStock)} current + {fmt(r.incomingQty)} incoming POs − forecast sales before start = <strong>{fmt(r.openingStock)}</strong> ({coverFmt(r.openingCover)} cover)</p>
+            <p><strong>Opening stock @ cycle start</strong> = {fmt(r.currentStock)} current + {fmt(r.plannedPacking)} planned packing before start − forecast sales before start = <strong>{fmt(r.openingStock)}</strong> ({coverFmt(r.openingCover)} cover)</p>
             <p><strong>Cycle demand</strong> (WoW forecast) = <strong>{fmt(r.cycleDemand)}</strong> · <strong>Target stock</strong> ({r.targetCover}w forward) = <strong>{fmt(r.targetStock)}</strong>{r.coverShort && <span className="text-amber-600"> (forecast runs out before {r.targetCover}w)</span>}</p>
-            <p><strong>Units to produce</strong> = target {fmt(r.targetStock)} − projected end (opening + POs in cycle − demand) = <strong className="text-copper">{fmt(r.unitsToProduce)}</strong>{r.fill !== null && <> · fill {r.fill} → {fmt(r.unitsToProduce * r.fill)} caps, bulk {r.bulkCode || "—"}</>}</p>
-            <p><strong>Incoming POs:</strong> <PoList pos={r.incomingPOs} /></p>
+            <p><strong>Units to produce this cycle</strong> = target {fmt(r.targetStock)} + cycle demand {fmt(r.cycleDemand)} − opening {fmt(r.openingStock)} = <strong className="text-copper">{fmt(r.unitsToProduce)}</strong>{r.fill !== null && <> · fill {r.fill} → {fmt(r.unitsToProduce * r.fill)} caps, bulk {r.bulkCode || "—"}</>}</p>
+            <p className="text-text-muted">In-cycle packing already scheduled is part of this figure (not extra supply). <strong>Pre-cycle supply feeding opening:</strong> <PoList pos={r.incomingPOs} /></p>
           </td>
         </tr>
       )}

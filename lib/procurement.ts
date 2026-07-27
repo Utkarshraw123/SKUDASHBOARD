@@ -4,6 +4,9 @@ import type { InventoryRow, WowDemand } from "./sheets";
 // ---- Config ----------------------------------------------------------------
 
 const RM_WAREHOUSES = ["WNP", "WNC"]; // raw material excess stock
+
+// Forward-cover target held at cycle end (weeks of forward forecast). Tunable
+// per-SKU / globally via the URL cover controls.
 const DEFAULT_TARGET_COVER = 16;
 const HIGH_TARGET_COVER = 20; // collagen & magnesium default
 
@@ -36,8 +39,9 @@ export interface FgPlanRow {
   openingStock: number;       // projected stock at cycle start (S0)
   openingCover: number;       // weeks of forward cover at cycle start
   cycleDemand: number;        // Σ weekly forecast within the cycle
-  incomingPOs: PoRef[];       // open POs due today..cycle end
-  incomingQty: number;
+  incomingPOs: PoRef[];       // supply landing before cycle start (packing + POs)
+  incomingQty: number;        // = plannedPacking + pre-cycle POs (feeds opening)
+  plannedPacking: number;     // planned FG packing landing today..cycle start
   targetStock: number;        // Σ next N weeks' forecast after cycle end
   coverShort: boolean;        // forward cover ran past the last forecast week
   unitsToProduce: number;
@@ -168,6 +172,7 @@ export function computePlan(inputs: {
   inventory: InventoryRow[];
   production: ProductionRow[];
   bulkPOs: BulkPoRow[];
+  packing: PackingRow[];
   rmBom: BomSheet;
   ancBom: BomSheet;
   wow: WowDemand;
@@ -178,7 +183,7 @@ export function computePlan(inputs: {
   perSku: Record<string, number>;
   today?: Date;
 }): ProcurementPlan {
-  const { skus, inventory, production, bulkPOs, rmBom, ancBom, wow, cycleStart, cycleEnd } = inputs;
+  const { skus, inventory, production, bulkPOs, packing, rmBom, ancBom, wow, cycleStart, cycleEnd } = inputs;
   const globalCover = inputs.globalCover > 0 ? inputs.globalCover : DEFAULT_TARGET_COVER;
   const cmCover = inputs.cmCover > 0 ? inputs.cmCover : HIGH_TARGET_COVER;
   const perSku = inputs.perSku ?? {};
@@ -220,6 +225,20 @@ export function computePlan(inputs: {
   const poQtyBetween = (pos: PoRef[], lo: Date, hi: Date) =>
     pos.reduce((t, p) => { const d = parseDMY(p.dueDate); return d && d > lo && d <= hi ? t + p.qty : t; }, 0);
 
+  // --- Finished-goods planned packing (the Packing Schedule) ---------------
+  // Committed FG production runs. These are the ONLY finished-goods supply
+  // source besides current stock (open POs / production master are bulk 1-codes,
+  // not FG). Planned packing landing BEFORE the cycle replenishes opening stock;
+  // in-cycle packing is deliberately NOT netted — it is part of the production
+  // the planner is sizing for this cycle (FG built from scratch in-cycle).
+  const packingFor = (part: string): PoRef[] =>
+    packing
+      .filter(p => p.partNumber === part && p.balance !== null && (p.balance as number) > 0)
+      .map(p => ({ po: p.purchaseOrder || p.description || "Packing", qty: p.balance as number, dueDate: p.dueDate }));
+  // Sum PoRefs landing in [lo, hi): lo inclusive, hi exclusive.
+  const qtyInWindow = (pos: PoRef[], lo: Date, hi: Date) =>
+    pos.reduce((t, p) => { const d = parseDMY(p.dueDate); return d && d >= lo && d < hi ? t + p.qty : t; }, 0);
+
   const skuByCode = new Map(skus.map(s => [s.skuCode, s]));
 
   // --- 1. Finished Goods (from WoW forecast) -------------------------------
@@ -238,9 +257,12 @@ export function computePlan(inputs: {
     const N = perSku[skuCode] ?? (isHighTarget(sku.description) ? cmCover : globalCover);
     const currentStock = sku.inventory ?? 0;
     const pos = openPoFor(skuCode);
-    const posBeforeStart = poQtyBefore(pos, cycleStart);
+    const packingRuns = packingFor(skuCode);
+    // Planned packing that lands before the cycle starts → replenishes opening.
+    const plannedPacking = outOfRange ? 0 : qtyInWindow(packingRuns, today, cycleStart);
+    const posBeforeStart = poQtyBefore(pos, cycleStart) + plannedPacking;
     const posInCycle = poQtyBetween(pos, cycleStart, cycleEnd);
-    const incomingQty = pos.reduce((t, p) => t + p.qty, 0);
+    const incomingQty = posBeforeStart;
 
     const salesToStart = outOfRange ? 0 : rangeSum(series, todayIdx, startIdx - 1);
     const openingStock = Math.max(0, currentStock + posBeforeStart - salesToStart);
@@ -252,12 +274,19 @@ export function computePlan(inputs: {
     const currentCover = coverWeeks(series, todayIdx, currentStock);
     const openingCover = coverWeeks(series, startIdx, openingStock);
 
+    // Pre-cycle supply that built the opening stock (for the row breakdown).
+    const preCycleSupply = [
+      ...pos.filter(p => { const d = parseDMY(p.dueDate); return d && d <= cycleStart; }),
+      ...packingRuns.filter(p => { const d = parseDMY(p.dueDate); return d && d >= today && d < cycleStart; }),
+    ];
+
     // Show a row if there's something to make, or opening cover is short of target.
     if (unitsToProduce > 0 || openingCover < N) {
       fg.push({
         skuCode, description: sku.description, bulkCode: sku.bulk, fill: sku.fill,
         targetCover: N, currentStock, currentCover, openingStock, openingCover,
-        cycleDemand, incomingPOs: pos, incomingQty, targetStock, coverShort, unitsToProduce,
+        cycleDemand, incomingPOs: preCycleSupply, incomingQty, plannedPacking,
+        targetStock, coverShort, unitsToProduce,
       });
     }
   }

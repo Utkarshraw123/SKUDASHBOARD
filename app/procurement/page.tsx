@@ -1,4 +1,4 @@
-import { fetchSkus, fetchProduction, fetchBulkOpenPOs, fetchRmBom, fetchAncillaryBom, fetchCurrentInventory, fetchWowDemand } from "@/lib/sheets";
+import { fetchSkus, fetchProduction, fetchBulkOpenPOs, fetchRmBom, fetchAncillaryBom, fetchCurrentInventory, fetchWowDemand, fetchPackingSchedule } from "@/lib/sheets";
 import { computePlan } from "@/lib/procurement";
 import { buildOrderActions } from "@/lib/procurement-actions";
 import ProcurementView from "@/components/ProcurementView";
@@ -41,17 +41,18 @@ export default async function ProcurementPage({
   const cmCover = Number(searchParams.coverCM) || 20;
   const perSku = parsePerSku(searchParams.cov);
 
-  const [skus, production, bulkPOs, rmBom, ancBom, inventory, wow] = await Promise.all([
+  const [skus, production, bulkPOs, packing, rmBom, ancBom, inventory, wow] = await Promise.all([
     fetchSkus(),
     fetchProduction(),
     fetchBulkOpenPOs(),
+    fetchPackingSchedule(),
     fetchRmBom(),
     fetchAncillaryBom(),
     fetchCurrentInventory(),
     fetchWowDemand(),
   ]);
 
-  const plan = computePlan({ skus, inventory, production, bulkPOs, rmBom, ancBom, wow, cycleStart, cycleEnd, globalCover, cmCover, perSku });
+  const plan = computePlan({ skus, inventory, production, bulkPOs, packing, rmBom, ancBom, wow, cycleStart, cycleEnd, globalCover, cmCover, perSku });
   const orders = buildOrderActions(plan, bulkPOs, production);
 
   return (
