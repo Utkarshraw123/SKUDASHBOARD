@@ -280,8 +280,12 @@ export function computePlan(inputs: {
       ...packingRuns.filter(p => { const d = parseDMY(p.dueDate); return d && d >= today && d < cycleStart; }),
     ];
 
-    // Show a row if there's something to make, or opening cover is short of target.
-    if (unitsToProduce > 0 || openingCover < N) {
+    // Show a row if there's something to make, or opening cover is short of
+    // target, OR the user has a manual per-SKU override on it — otherwise a SKU
+    // whose target you lower below its cover vanishes from the table and can no
+    // longer be edited back up.
+    const hasOverride = perSku[skuCode] !== undefined;
+    if (unitsToProduce > 0 || openingCover < N || hasOverride) {
       fg.push({
         skuCode, description: sku.description, bulkCode: sku.bulk, fill: sku.fill,
         targetCover: N, currentStock, currentCover, openingStock, openingCover,
