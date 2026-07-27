@@ -84,15 +84,24 @@ export default function ProcurementView({
   const [cm, setCm] = useState(String(coverCM));
   const [targets, setTargets] = useState<Record<string, number>>({ ...perSkuOverrides });
 
-  function recalc() {
+  // Push a fresh server-side plan. Pass an explicit targets map to apply a
+  // single per-SKU change immediately (avoids racing async setState).
+  function pushPlan(nextTargets: Record<string, number> = targets) {
     const params = new URLSearchParams();
     params.set("start", s);
     params.set("end", e);
     params.set("cover", g || "16");
     params.set("coverCM", cm || "20");
-    const cov = Object.entries(targets).filter(([, w]) => w > 0).map(([k, w]) => `${k}:${w}`).join(",");
+    const cov = Object.entries(nextTargets).filter(([, w]) => w > 0).map(([k, w]) => `${k}:${w}`).join(",");
     if (cov) params.set("cov", cov);
     router.push(`${pathname}?${params.toString()}`);
+  }
+  function recalc() { pushPlan(); }
+  // Apply one SKU's target cover and recompute the whole plan (FG → bulk → RM → ancillaries).
+  function applyTarget(sku: string, value: number) {
+    const next = { ...targets, [sku]: value };
+    setTargets(() => next);
+    pushPlan(next);
   }
 
   const input = "rounded-xl border border-[#e4ddd4] bg-white px-3 py-2 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper";
@@ -226,7 +235,7 @@ export default function ProcurementView({
       {/* ---- Cascade detail ---- */}
       <h2 className="font-serif text-lg text-charcoal mt-12 mb-4">Cascade detail</h2>
 
-      <FgSection rows={plan.fg} targets={targets} setTargets={setTargets} />
+      <FgSection rows={plan.fg} targets={targets} setTargets={setTargets} onApply={applyTarget} />
       <BulkSection rows={plan.bulk} />
       <RmSection rows={plan.rm} />
       <AncSection rows={plan.ancillary} />
@@ -266,10 +275,11 @@ export default function ProcurementView({
 
 // ---------- FG section (editable targets) ----------
 
-function FgSection({ rows, targets, setTargets }: {
+function FgSection({ rows, targets, setTargets, onApply }: {
   rows: FgPlanRow[];
   targets: Record<string, number>;
   setTargets: (fn: (t: Record<string, number>) => Record<string, number>) => void;
+  onApply: (sku: string, value: number) => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const setTarget = (sku: string, v: string) => {
@@ -280,7 +290,7 @@ function FgSection({ rows, targets, setTargets }: {
     <SectionCard
       title="1 · Finished Goods"
       exportName="procurement-finished-goods"
-      subtitle="Cover from the WoW weekly forecast. Opening cover = projected stock at cycle start. Edit a Target and Recalculate. Greyed rows already reach target."
+      subtitle="Cover from the WoW weekly forecast. Opening cover = projected stock at cycle start. Change a Target and hit Apply to recompute the whole plan for that SKU. Greyed rows already reach target."
       kpis={[
         { label: "SKUs to produce", value: String(rows.filter(r => r.unitsToProduce > 0).length), color: "text-copper" },
         { label: "Total units", value: fmt(rows.reduce((a, r) => a + r.unitsToProduce, 0)) },
@@ -307,7 +317,8 @@ function FgSection({ rows, targets, setTargets }: {
                   <FgRow key={r.skuCode} r={r} isOpen={isOpen} noAction={noAction}
                     value={targets[r.skuCode] ?? r.targetCover}
                     onToggle={() => setOpen(isOpen ? null : r.skuCode)}
-                    onTarget={v => setTarget(r.skuCode, v)} />
+                    onTarget={v => setTarget(r.skuCode, v)}
+                    onApply={v => onApply(r.skuCode, v)} />
                 );
               })}
             </tbody>
@@ -318,10 +329,12 @@ function FgSection({ rows, targets, setTargets }: {
   );
 }
 
-function FgRow({ r, isOpen, noAction, value, onToggle, onTarget }: {
+function FgRow({ r, isOpen, noAction, value, onToggle, onTarget, onApply }: {
   r: FgPlanRow; isOpen: boolean; noAction: boolean; value: number;
-  onToggle: () => void; onTarget: (v: string) => void;
+  onToggle: () => void; onTarget: (v: string) => void; onApply: (v: number) => void;
 }) {
+  // Dirty when the edited target differs from what the current plan was computed with.
+  const dirty = Number(value) > 0 && Number(value) !== r.targetCover;
   return (
     <>
       <tr className={`border-b border-[#e4ddd4]/60 hover:bg-cream transition-colors ${noAction ? "opacity-50" : ""}`}>
@@ -333,9 +346,18 @@ function FgRow({ r, isOpen, noAction, value, onToggle, onTarget }: {
         <td className={`${TD} text-right ${r.openingCover < r.targetCover ? "text-amber-600" : "text-text-muted"}`}>{coverFmt(r.openingCover)}</td>
         <td className={`${TD} text-right text-text-muted`}>{fmt(r.cycleDemand)}</td>
         <td className={`${TD} text-right`}>
-          <input type="number" min={1} value={value}
-            onChange={ev => onTarget(ev.target.value)} onClick={ev => ev.stopPropagation()}
-            className="w-16 text-right rounded-lg border border-[#e4ddd4] bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper" />
+          <div className="flex items-center justify-end gap-1.5">
+            <input type="number" min={1} value={value}
+              onChange={ev => onTarget(ev.target.value)} onClick={ev => ev.stopPropagation()}
+              onKeyDown={ev => { if (ev.key === "Enter" && dirty) { ev.preventDefault(); onApply(Number(value)); } }}
+              className={`w-16 text-right rounded-lg border bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-copper/30 focus:border-copper ${dirty ? "border-copper" : "border-[#e4ddd4]"}`} />
+            {dirty && (
+              <button onClick={ev => { ev.stopPropagation(); onApply(Number(value)); }}
+                className="rounded-lg bg-copper text-white text-xs px-2.5 py-1 hover:bg-copper-light transition-colors whitespace-nowrap">
+                Apply
+              </button>
+            )}
+          </div>
         </td>
         <td className={`${TD} text-right font-semibold ${noAction ? "text-text-muted" : "text-copper"} cursor-pointer`} onClick={onToggle}>
           {noAction ? "Covered" : fmt(r.unitsToProduce)}
