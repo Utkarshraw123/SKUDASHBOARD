@@ -71,10 +71,21 @@ export async function getRun(id: number): Promise<Run | null> {
   return res.rows[0] ? rowToRun(res.rows[0] as Record<string, unknown>) : null;
 }
 
-export async function listRuns(opts: { date?: string } = {}): Promise<Run[]> {
-  const res = opts.date
-    ? await getClient().execute({ sql: "SELECT * FROM runs WHERE date = ? ORDER BY id DESC", args: [opts.date] })
-    : await getClient().execute("SELECT * FROM runs ORDER BY id DESC");
+export async function listRuns(opts: { date?: string; from?: string; to?: string } = {}): Promise<Run[]> {
+  if (opts.date) {
+    const res = await getClient().execute({ sql: "SELECT * FROM runs WHERE date = ? ORDER BY id DESC", args: [opts.date] });
+    return res.rows.map((r) => rowToRun(r as Record<string, unknown>));
+  }
+  if (opts.from || opts.to) {
+    const from = opts.from ?? "0000-00-00";
+    const to = opts.to ?? "9999-99-99";
+    const res = await getClient().execute({
+      sql: "SELECT * FROM runs WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC",
+      args: [from, to],
+    });
+    return res.rows.map((r) => rowToRun(r as Record<string, unknown>));
+  }
+  const res = await getClient().execute("SELECT * FROM runs ORDER BY id DESC");
   return res.rows.map((r) => rowToRun(r as Record<string, unknown>));
 }
 
