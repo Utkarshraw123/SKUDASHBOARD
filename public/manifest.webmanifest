@@ -1,0 +1,13 @@
+{
+  "name": "Wild Nutrition Production",
+  "short_name": "WN Production",
+  "start_url": "/floor",
+  "scope": "/floor",
+  "display": "standalone",
+  "background_color": "#f7f3ee",
+  "theme_color": "#b5673a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
