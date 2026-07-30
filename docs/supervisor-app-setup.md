@@ -26,9 +26,21 @@ A standalone Turso (libSQL) database powers the Supervisor Production App (`/flo
    ```
 6. Change the admin password after first login (admin UI ships in a later phase).
 
+## Phase 2 — Supervisor PWA
+- Install: open `/floor` on a phone → browser "Add to Home Screen" → launches full-screen
+  (a `/floor` layout supplies the manifest + `standalone` display).
+- Daily flow: Start-of-Day SU04 (Shift-1, gates run logging) → log per-machine runs →
+  End-of-Day SU04 (Shift-2). Deny needs a comment; each phase needs a different
+  supervisor as cross-check. Runs are voided (never deleted); every change is in `audit_log`.
+- Cross-check needs ≥2 active supervisor/admin users — add more via the (future) admin UI
+  or a seed insert. For local testing add one:
+  `TURSO_DATABASE_URL=file:local.db npx tsx -e "..."` (insert a supervisor row with a bcrypt hash).
+- Placeholder PWA icons live at `public/icons/icon-{192,512}.png` (solid copper) — replace
+  with branded art later.
+
 ## Notes
-- The `/floor` pages render as a full-screen overlay (`fixed inset-0 z-50`) so they
-  cover the dashboard's desktop sidebar on phones. Phase 2 will give `/floor` its own
-  root chrome (PWA manifest, install prompt, no dashboard shell).
+- The `/floor` layout renders a full-screen overlay (`fixed inset-0 z-50`) so it covers the
+  dashboard's desktop sidebar on phones. A future phase can extract `/floor` into a route
+  group with its own root layout (no dashboard shell at all).
 - Roles: `supervisor` (uses the app), `manager` (views dashboards), `admin` (config).
 - Session cookie: `wd_floor_sid` (httpOnly, 30-day TTL, server-side `sessions` table).
