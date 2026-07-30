@@ -75,6 +75,32 @@ export async function getDayChecks(date: string): Promise<ReadinessDayView> {
   return { day, items, checks };
 }
 
+export async function listReadinessDaysInRange(from: string, to: string): Promise<ReadinessDayView[]> {
+  const daysRes = await getClient().execute({
+    sql: "SELECT * FROM readiness_days WHERE date >= ? AND date <= ? ORDER BY date DESC",
+    args: [from, to],
+  });
+  const out: ReadinessDayView[] = [];
+  for (const row of daysRes.rows) {
+    const day = rowToDay(row as Record<string, unknown>);
+    const items = await itemsForTemplate(day.templateId);
+    const checksRes = await getClient().execute({
+      sql: "SELECT item_id, phase, result, comment, checked_by, checked_at FROM readiness_checks WHERE readiness_day_id=?",
+      args: [day.id],
+    });
+    const checks: ReadinessCheck[] = checksRes.rows.map((r) => ({
+      itemId: r.item_id as number,
+      phase: r.phase as Phase,
+      result: r.result as CheckResult,
+      comment: (r.comment as string) ?? null,
+      checkedBy: r.checked_by as number,
+      checkedAt: r.checked_at as string,
+    }));
+    out.push({ day, items, checks });
+  }
+  return out;
+}
+
 export async function saveCheck(
   date: string,
   input: { itemId: number; phase: Phase; result: CheckResult; comment: string | null },
