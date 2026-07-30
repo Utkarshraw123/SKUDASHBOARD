@@ -49,6 +49,19 @@ Internal Production tabs that read the standalone Turso DB (read-only):
 The dashboard is unauthenticated like the rest of the app; only `/floor` writes data.
 The legacy sheet-based **Performance** tab remains until the DB views are trusted.
 
+## Phase 4 — Admin UI
+`/floor/admin` (admins only — `requireRole("admin")`; API routes return 403 for non-admins):
+- **Users** — create (username/name/role/password), deactivate/reactivate, change role, reset
+  password. Self-lockout guarded (can't deactivate or de-admin yourself). Passwords hashed; the
+  audit records `password_hash` changes as `***` (never the secret).
+- **Operators / Machines** — create, rename, deactivate/reactivate.
+- **Checklist** — add / edit label / toggle critical / remove (deactivate) items on the active
+  SU04 template. Removed items are soft-deactivated so historical checks still resolve.
+Every change writes `audit_log` (entity user|operator|machine|checklist_item, changed_by=admin).
+Admins reach it via the "Admin" link on the `/floor` day home. Deferred (future): full checklist
+template **versioning** (clone-to-new-version); Phase-4 edits the active template in place
+(additive + soft-remove), which is safe for this internal tool.
+
 ## Notes
 - The `/floor` layout renders a full-screen overlay (`fixed inset-0 z-50`) so it covers the
   dashboard's desktop sidebar on phones. A future phase can extract `/floor` into a route
