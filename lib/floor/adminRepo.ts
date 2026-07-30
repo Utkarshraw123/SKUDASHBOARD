@@ -72,3 +72,57 @@ export async function resetUserPassword(id: number, password: string, adminId: n
   await getClient().execute({ sql: "UPDATE users SET password_hash=? WHERE id=?", args: [hash, id] });
   await audit("user", id, "update", "password_hash", "***", "***", adminId);
 }
+
+export interface NamedRow { id: number; name: string; active: boolean; }
+
+function mapNamed(rows: { id: unknown; name: unknown; active: unknown }[]): NamedRow[] {
+  return rows.map((r) => ({ id: r.id as number, name: r.name as string, active: !!(r.active as number) }));
+}
+
+// --- Operators ---
+export async function listAllOperators(): Promise<NamedRow[]> {
+  const res = await getClient().execute("SELECT id, name, active FROM operators ORDER BY name");
+  return mapNamed(res.rows as never);
+}
+export async function createOperator(name: string, adminId: number): Promise<number> {
+  const res = await getClient().execute({
+    sql: "INSERT INTO operators (name, active, created_at) VALUES (?, 1, ?) RETURNING id",
+    args: [name, new Date().toISOString()],
+  });
+  const id = res.rows[0].id as number;
+  await audit("operator", id, "create", null, null, name, adminId);
+  return id;
+}
+export async function renameOperator(id: number, name: string, adminId: number): Promise<void> {
+  const before = await getClient().execute({ sql: "SELECT name FROM operators WHERE id=?", args: [id] });
+  await getClient().execute({ sql: "UPDATE operators SET name=? WHERE id=?", args: [name, id] });
+  await audit("operator", id, "update", "name", (before.rows[0]?.name as string) ?? "", name, adminId);
+}
+export async function setOperatorActive(id: number, active: boolean, adminId: number): Promise<void> {
+  await getClient().execute({ sql: "UPDATE operators SET active=? WHERE id=?", args: [active ? 1 : 0, id] });
+  await audit("operator", id, "update", "active", active ? "0" : "1", active ? "1" : "0", adminId);
+}
+
+// --- Machines ---
+export async function listAllMachines(): Promise<NamedRow[]> {
+  const res = await getClient().execute("SELECT id, name, active FROM machines ORDER BY name");
+  return mapNamed(res.rows as never);
+}
+export async function createMachine(name: string, adminId: number): Promise<number> {
+  const res = await getClient().execute({
+    sql: "INSERT INTO machines (name, active, created_at) VALUES (?, 1, ?) RETURNING id",
+    args: [name, new Date().toISOString()],
+  });
+  const id = res.rows[0].id as number;
+  await audit("machine", id, "create", null, null, name, adminId);
+  return id;
+}
+export async function renameMachine(id: number, name: string, adminId: number): Promise<void> {
+  const before = await getClient().execute({ sql: "SELECT name FROM machines WHERE id=?", args: [id] });
+  await getClient().execute({ sql: "UPDATE machines SET name=? WHERE id=?", args: [name, id] });
+  await audit("machine", id, "update", "name", (before.rows[0]?.name as string) ?? "", name, adminId);
+}
+export async function setMachineActive(id: number, active: boolean, adminId: number): Promise<void> {
+  await getClient().execute({ sql: "UPDATE machines SET active=? WHERE id=?", args: [active ? 1 : 0, id] });
+  await audit("machine", id, "update", "active", active ? "0" : "1", active ? "1" : "0", adminId);
+}
