@@ -24,6 +24,12 @@ export default async function FloorHome() {
         <LogoutButton />
       </header>
 
+      {user.role === "admin" && (
+        <Link href="/floor/admin" className="block rounded-2xl bg-white border border-[#e4ddd4] p-4 text-copper font-medium">
+          Admin — manage users, machines &amp; checklist →
+        </Link>
+      )}
+
       <Link href="/floor/checklist/start" className="block rounded-2xl bg-white border border-[#e4ddd4] p-5">
         <div className="flex items-center justify-between">
           <span className="font-medium text-charcoal">Start-of-Day checks</span>
