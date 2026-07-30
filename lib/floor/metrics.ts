@@ -51,7 +51,7 @@ export function summarizeRuns(runs: Run[]): RunTotals {
     totalPlanned,
     avgEfficiency: efficiency(totalActual, totalPlanned),
     totalDowntimeMin,
-    perOperator: [...byOp.entries()].map(([operatorId, v]) => ({
+    perOperator: Array.from(byOp.entries()).map(([operatorId, v]) => ({
       operatorId,
       actual: v.actual,
       planned: v.planned,
