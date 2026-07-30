@@ -38,6 +38,17 @@ A standalone Turso (libSQL) database powers the Supervisor Production App (`/flo
 - Placeholder PWA icons live at `public/icons/icon-{192,512}.png` (solid copper) — replace
   with branded art later.
 
+## Phase 3 — Dashboard reflection
+Internal Production tabs that read the standalone Turso DB (read-only):
+- **Appraisals** (`/planning/appraisals`) — per-operator & per-machine output, efficiency,
+  throughput, downtime, days worked; date-range filter; CSV. Voids excluded.
+- **Runs** (`/planning/runs`) — one row per logged run; voided runs struck-through with reason,
+  excluded from active totals; CSV.
+- **SU04** (`/planning/compliance`) — each day's start/end signers + cross-checks, answered
+  counts, and any denied items (amber, with comments); CSV.
+The dashboard is unauthenticated like the rest of the app; only `/floor` writes data.
+The legacy sheet-based **Performance** tab remains until the DB views are trusted.
+
 ## Notes
 - The `/floor` layout renders a full-screen overlay (`fixed inset-0 z-50`) so it covers the
   dashboard's desktop sidebar on phones. A future phase can extract `/floor` into a route
