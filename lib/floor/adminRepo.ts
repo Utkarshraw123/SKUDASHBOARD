@@ -126,3 +126,70 @@ export async function setMachineActive(id: number, active: boolean, adminId: num
   await getClient().execute({ sql: "UPDATE machines SET active=? WHERE id=?", args: [active ? 1 : 0, id] });
   await audit("machine", id, "update", "active", active ? "0" : "1", active ? "1" : "0", adminId);
 }
+
+export interface ChecklistItemRow { id: number; sortOrder: number; category: string; label: string; critical: boolean; }
+export interface ActiveTemplate {
+  template: { id: number; code: string; version: string; title: string };
+  items: ChecklistItemRow[];
+}
+
+async function activeTemplateId(): Promise<number | null> {
+  const res = await getClient().execute("SELECT id FROM checklist_templates WHERE active=1 ORDER BY id DESC LIMIT 1");
+  return res.rows[0] ? (res.rows[0].id as number) : null;
+}
+
+export async function getActiveTemplateWithItems(): Promise<ActiveTemplate | null> {
+  const tRes = await getClient().execute("SELECT id, code, version, title FROM checklist_templates WHERE active=1 ORDER BY id DESC LIMIT 1");
+  if (!tRes.rows[0]) return null;
+  const tid = tRes.rows[0].id as number;
+  const iRes = await getClient().execute({
+    sql: "SELECT id, sort_order, category, label, critical FROM checklist_items WHERE template_id=? AND active=1 ORDER BY sort_order",
+    args: [tid],
+  });
+  return {
+    template: {
+      id: tid,
+      code: tRes.rows[0].code as string,
+      version: tRes.rows[0].version as string,
+      title: tRes.rows[0].title as string,
+    },
+    items: iRes.rows.map((r) => ({
+      id: r.id as number,
+      sortOrder: r.sort_order as number,
+      category: r.category as string,
+      label: r.label as string,
+      critical: !!(r.critical as number),
+    })),
+  };
+}
+
+export async function addChecklistItem(input: { category: string; label: string; critical: boolean }, adminId: number): Promise<number> {
+  const tid = await activeTemplateId();
+  if (tid == null) throw new Error("No active checklist template.");
+  const maxRes = await getClient().execute({ sql: "SELECT COALESCE(MAX(sort_order),0) AS m FROM checklist_items WHERE template_id=?", args: [tid] });
+  const nextOrder = (maxRes.rows[0].m as number) + 1;
+  const res = await getClient().execute({
+    sql: "INSERT INTO checklist_items (template_id, sort_order, category, label, critical, active) VALUES (?, ?, ?, ?, ?, 1) RETURNING id",
+    args: [tid, nextOrder, input.category, input.label, input.critical ? 1 : 0],
+  });
+  const id = res.rows[0].id as number;
+  await audit("checklist_item", id, "create", null, null, input.label, adminId);
+  return id;
+}
+
+export async function updateChecklistItem(id: number, patch: { label?: string; critical?: boolean }, adminId: number): Promise<void> {
+  const before = await getClient().execute({ sql: "SELECT label, critical FROM checklist_items WHERE id=?", args: [id] });
+  if (patch.label !== undefined) {
+    await getClient().execute({ sql: "UPDATE checklist_items SET label=? WHERE id=?", args: [patch.label, id] });
+    await audit("checklist_item", id, "update", "label", (before.rows[0]?.label as string) ?? "", patch.label, adminId);
+  }
+  if (patch.critical !== undefined) {
+    await getClient().execute({ sql: "UPDATE checklist_items SET critical=? WHERE id=?", args: [patch.critical ? 1 : 0, id] });
+    await audit("checklist_item", id, "update", "critical", String(before.rows[0]?.critical ?? ""), patch.critical ? "1" : "0", adminId);
+  }
+}
+
+export async function setChecklistItemActive(id: number, active: boolean, adminId: number): Promise<void> {
+  await getClient().execute({ sql: "UPDATE checklist_items SET active=? WHERE id=?", args: [active ? 1 : 0, id] });
+  await audit("checklist_item", id, "update", "active", active ? "0" : "1", active ? "1" : "0", adminId);
+}
