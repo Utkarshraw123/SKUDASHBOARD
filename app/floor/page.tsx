@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export default async function FloorHome() {
   const user = await requireUser();
   return (
-    <div className="min-h-screen bg-cream p-6">
+    <div className="fixed inset-0 z-50 bg-cream p-6 overflow-auto">
       <h1 className="font-serif text-2xl text-charcoal">Welcome, {user.name}</h1>
       <p className="text-text-muted mt-2">Role: {user.role}</p>
       <form action="/api/floor/logout" method="post" className="mt-6">

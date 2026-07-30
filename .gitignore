@@ -19,3 +19,7 @@ out/
 .DS_Store
 *.pem
 .env*
+
+# Local libSQL dev database
+local.db
+local.db-*

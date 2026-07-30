@@ -29,7 +29,7 @@ export default function FloorLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cream px-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-cream px-4 overflow-auto">
       <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-2xl border border-[#e4ddd4] p-6 space-y-4">
         <h1 className="font-serif text-2xl text-charcoal">Production Login</h1>
         {error && <p className="text-sm text-red-600">{error}</p>}
