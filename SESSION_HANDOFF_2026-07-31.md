@@ -13,10 +13,16 @@
 > Latest production deploy is **Ready**.
 >
 > **THIS SESSION SHIPPED ALL FOUR PHASES of the Supervisor Production App** (Phases 1→4), each
-> built with TDD, verified end-to-end, and deployed. **The one thing NOT done — and the single
-> most important next action — is provisioning the production Turso database** (§9). Until then
-> every `/floor/*` route and the three new `/planning/*` DB tabs error on production; the rest of
-> the dashboard is unaffected.
+> built with TDD, verified end-to-end, and deployed.
+>
+> **UPDATE 2026-07-31 (later session): the Turso blocker is RESOLVED.** The production DB
+> `wild-dash-production` (Turso account `utkarshraw123`, group `default`, aws-eu-west-1) was
+> created, seeded (15 SU04 items · admin · 4 machines · 5 operators), and wired into the
+> **skudashboard** Vercel Production env (`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`). Verified
+> live: `/api/floor/login` → `{"ok":true,"role":"admin"}`, `/api/floor/catalog` returns seeded
+> data, and `/planning/{appraisals,runs,compliance}` all 200 with no Turso error. **The app is now
+> fully usable.** Temp admin password was `WildDash-Floor-2026!` — MUST be changed on first login,
+> and a 2nd supervisor must be added for SU04 cross-check (see §9).
 
 ---
 
@@ -369,8 +375,10 @@ Existing: `SHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `PRODUCTION_REPORTS_SHEET_I
 
 ## 13. Left open / next steps (priority order)
 
-1. **★ Provision the production Turso DB (§9)** — the single blocker to real-world use. Needs the
-   user's Turso account. Then redeploy + change the admin password.
+1. ~~**★ Provision the production Turso DB (§9)**~~ — ✅ DONE 2026-07-31 (see top banner). DB
+   created + seeded + env set + deployed + verified live. **Still to do by the user:** change the
+   temp admin password (`WildDash-Floor-2026!`) on first login, and add a 2nd supervisor for SU04
+   cross-check.
 2. ~~**Confirm SU04 item count**~~ — ✅ RESOLVED 2026-07-31: user confirmed keeping 15 (§7). No action.
 3. **Onboard real users** via `/floor/admin` — create the actual supervisors; deactivate the
    seeded sample operators/machines that don't match reality and add the real ones.
