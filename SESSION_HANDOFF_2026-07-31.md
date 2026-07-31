@@ -75,6 +75,19 @@
 > manifest `public/icons/icon-{192,512}.png` — **replacing the placeholder copper squares** (so the
 > "replace placeholder icons" TODO below is DONE). Source art: `~/Downloads/WhatsApp Image 2026-07-31
 > at 16.33.30.jpeg`. To regenerate/rebrand, re-run the PIL steps in that commit against a new source.
+>
+> **UPDATE 2026-07-31 (HEAD `f7b481e`): the DASHBOARD is now mobile-responsive** (the `/floor` app
+> already was). All changes are mobile-first and gated below `md:` — **desktop renders exactly as
+> before** (verified side-by-side). (1) `components/Sidebar.tsx`: below `md` the 256px sidebar
+> becomes a slide-out **drawer** opened by a hamburger in a new mobile top bar (logo + menu), with
+> backdrop + close button + auto-close on route change; at `md:` it's the same static column. (2)
+> `app/layout.tsx`: `<main>` is `flex-1 min-w-0 overflow-auto p-4 pt-20 md:p-10` (full-width, mobile
+> padding, clears the top bar, `min-w-0` lets wide content shrink). (3) Wrapped 4 previously-unwrapped
+> wide tables (Overview/Variance/Inventory/Risk) in `overflow-x-auto`. Most grids were already
+> responsive; the 4 fixed `grid-cols-3` spots are small stat-triplets that read fine at 3-up.
+> **Minor remaining:** the two `ReadinessView.tsx` `w-full` tables aren't wrapped (they compress
+> rather than clip — acceptable; auto-wrap script mismatched their ternary nesting, do by hand if
+> ever needed).
 
 ---
 
