@@ -45,6 +45,16 @@
 > live. NOTE: the app report write path is the same known-working sheet code — it was verified via
 > auth paths + the live work-order picker, NOT by submitting a test report (golden rule: never
 > write to the 5 real reports).
+>
+> **UPDATE 2026-07-31 (HEAD `fb0873c`): two /floor fixes.** (1) **Reports now appear on the
+> dashboard immediately.** `/planning/yield` + `/planning/reports` were ISR (`revalidate=60`) so a
+> just-submitted report lagged ~1-2 min behind the force-dynamic Appraisals/Runs/SU04 tabs — both
+> are now `force-dynamic` (the tagged ~120s sheet-data cache still guards the Google read quota).
+> The write path was never the problem — the report was always landing in the sheet. (2) **The app
+> no longer shows dashboard chrome** — the root layout's "Select Market View" modal, sidebar, and
+> chatbot leaked into `/floor`; new `components/ChromeGate.tsx` (client, `usePathname`) hides them
+> on `/floor` routes only (dashboard unchanged, regression-checked). The `/floor` home now greets
+> the supervisor by first name ("Welcome, <name>").
 
 ---
 
