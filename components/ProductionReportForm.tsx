@@ -70,7 +70,7 @@ const addBtnCls =
 const removeBtnCls =
   "text-[11px] text-text-muted hover:text-red-600 transition-colors";
 
-export default function ProductionReportForm({ options, editReport }: { options: WorkOrderOption[]; editReport?: EditReport }) {
+export default function ProductionReportForm({ options, editReport, sessionAuth }: { options: WorkOrderOption[]; editReport?: EditReport; sessionAuth?: boolean }) {
   const isEdit = !!editReport;
   const editWO: WorkOrderOption | null = editReport
     ? {
@@ -79,7 +79,9 @@ export default function ProductionReportForm({ options, editReport }: { options:
       }
     : null;
 
-  const [unlocked, setUnlocked] = useState(false);
+  // In the /floor app the supervisor is already authenticated, so the shared-password
+  // gate is skipped entirely; on the dashboard the form still starts locked.
+  const [unlocked, setUnlocked] = useState(sessionAuth === true);
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState("");
 
@@ -367,7 +369,7 @@ export default function ProductionReportForm({ options, editReport }: { options:
             <div className={`rounded-xl px-4 py-3 text-sm ${result.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
               {result.msg}
               {result.ok && result.blended !== undefined && <> Blended wastage: <strong>{result.blended}%</strong>{result.rows && result.rows > 1 ? ` (${result.rows} bulk rows written)` : ""}.</>}
-              {result.ok && <> <Link href="/planning/yield" className="underline font-medium hover:opacity-70">View in Internal Production Yield →</Link></>}
+              {result.ok && !sessionAuth && <> <Link href="/planning/yield" className="underline font-medium hover:opacity-70">View in Internal Production Yield →</Link></>}
             </div>
           )}
 
@@ -382,7 +384,7 @@ export default function ProductionReportForm({ options, editReport }: { options:
         <div className={`rounded-xl px-4 py-3 text-sm ${result.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {result.msg}
           {result.ok && result.blended !== undefined && <> Blended wastage: <strong>{result.blended}%</strong>{result.rows && result.rows > 1 ? ` (${result.rows} bulk rows written)` : ""}.</>}
-          {result.ok && <> <Link href="/planning/yield" className="underline font-medium hover:opacity-70">View in Internal Production Yield →</Link></>}
+          {result.ok && !sessionAuth && <> <Link href="/planning/yield" className="underline font-medium hover:opacity-70">View in Internal Production Yield →</Link></>}
         </div>
       )}
     </form>

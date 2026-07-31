@@ -24,36 +24,49 @@ export default async function FloorHome() {
         <LogoutButton />
       </header>
 
+      {/* Startup checks (SU04 Start-of-Day) */}
+      <Link href="/floor/checklist/start" className="block rounded-2xl bg-white border border-[#e4ddd4] p-5">
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-charcoal">Startup checks</span>
+          <span className="text-sm text-text-muted">{start.done}/{start.total}{view.day.startCompletedBy ? " ✓" : ""}</span>
+        </div>
+        <p className="text-sm text-text-muted mt-1">SU04 start-of-day warehouse checks.</p>
+        {start.denyCount > 0 && <p className="text-sm text-amber-600 mt-1">{start.denyCount} denied</p>}
+      </Link>
+
+      {/* Log inputs (production runs) — gated on startup checks */}
+      {runsUnlocked ? (
+        <Link href="/floor/runs" className="block rounded-2xl bg-white border border-[#e4ddd4] p-5">
+          <span className="font-medium text-charcoal">Log inputs</span>
+          <p className="text-sm text-text-muted mt-1">Record per-machine production runs and output.</p>
+        </Link>
+      ) : (
+        <div className="block rounded-2xl bg-[#f0e9e0] border border-[#e4ddd4] p-5">
+          <span className="font-medium text-text-muted">Log inputs</span>
+          <p className="text-sm text-text-muted mt-1">Complete Startup checks to unlock run logging.</p>
+        </div>
+      )}
+
+      {/* Report production (detailed wastage / yield report) */}
+      <Link href="/floor/report" className="block rounded-2xl bg-copper text-white p-5">
+        <span className="font-medium">Report production</span>
+        <p className="text-sm text-white/85 mt-1">Log a work order's usage, waste &amp; batches.</p>
+      </Link>
+
+      {/* End-of-day checks (SU04 End-of-Day) */}
+      <Link href="/floor/checklist/end" className="block rounded-2xl bg-white border border-[#e4ddd4] p-5">
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-charcoal">End-of-day checks</span>
+          <span className="text-sm text-text-muted">{end.done}/{end.total}{view.day.endCompletedBy ? " ✓" : ""}</span>
+        </div>
+        <p className="text-sm text-text-muted mt-1">SU04 end-of-day warehouse checks.</p>
+      </Link>
+
       {user.role === "admin" && (
         <Link href="/floor/admin" className="block rounded-2xl bg-white border border-[#e4ddd4] p-4 text-copper font-medium">
           Admin — manage users, machines &amp; checklist →
         </Link>
       )}
-
-      <Link href="/floor/checklist/start" className="block rounded-2xl bg-white border border-[#e4ddd4] p-5">
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-charcoal">Start-of-Day checks</span>
-          <span className="text-sm text-text-muted">{start.done}/{start.total}{view.day.startCompletedBy ? " ✓" : ""}</span>
-        </div>
-        {start.denyCount > 0 && <p className="text-sm text-amber-600 mt-1">{start.denyCount} denied</p>}
-      </Link>
-
-      {runsUnlocked ? (
-        <Link href="/floor/runs" className="block rounded-2xl bg-copper text-white p-5 font-medium">
-          Log production runs →
-        </Link>
-      ) : (
-        <div className="rounded-2xl bg-[#f0e9e0] text-text-muted p-5 text-sm">
-          Complete Start-of-Day checks to unlock run logging.
-        </div>
-      )}
-
-      <Link href="/floor/checklist/end" className="block rounded-2xl bg-white border border-[#e4ddd4] p-5">
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-charcoal">End-of-Day checks</span>
-          <span className="text-sm text-text-muted">{end.done}/{end.total}{view.day.endCompletedBy ? " ✓" : ""}</span>
-        </div>
-      </Link>
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import {
-  computeWastage, reportToRows, REPORT_HEADERS, isRequiredDMY,
+  computeWastage, reportToRows, REPORT_HEADERS, isRequiredDMY, reportAuthorized,
   type ProductionReportInput, type ProductBatchEntry, type BulkEntry,
 } from "@/lib/production-report";
 import { appendProductionReport, updateProductionReport } from "@/lib/sheets";
+import { getCurrentUser } from "@/lib/auth/require";
 
 export const runtime = "nodejs";
 
@@ -21,9 +22,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  // Authorize via EITHER a supervisor login session (the /floor app) OR the
+  // shared password (the dashboard form). Supervisors never type the password.
   const password = String(body.password ?? "");
   const expected = process.env.PRODUCTION_REPORT_PASSWORD ?? "12345";
-  if (password !== expected) {
+  const sessionUser = await getCurrentUser();
+  if (!reportAuthorized(!!sessionUser, password, expected)) {
     return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
   }
 

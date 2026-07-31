@@ -36,6 +36,13 @@ export function isRequiredDMY(s: string): boolean {
   return (s ?? "").trim() !== "" && isValidDMY(s);
 }
 
+// Authorization for saving a production report. The dashboard form supplies the
+// shared password; the /floor app instead relies on the supervisor's login
+// session (so supervisors never type the shared password). Either is sufficient.
+export function reportAuthorized(hasSession: boolean, password: string, expected: string): boolean {
+  return hasSession || password === expected;
+}
+
 // A finished-good batch produced on the work order.
 export interface ProductBatchEntry {
   batch: string;

@@ -1,6 +1,7 @@
-import { fetchWNPPlanning, fetchSkus, fetchCurrentInventory, fetchProductionReportRows } from "@/lib/sheets";
+import { fetchProductionReportRows } from "@/lib/sheets";
+import { buildWorkOrderOptions } from "@/lib/report-options";
 import { computeInternalYield } from "@/lib/internal-yield";
-import ProductionReportForm, { type WorkOrderOption, type EditReport } from "@/components/ProductionReportForm";
+import ProductionReportForm, { type EditReport } from "@/components/ProductionReportForm";
 
 export const revalidate = 300;
 
@@ -13,33 +14,7 @@ export default async function ProductionReportPage({
 }) {
   const editId = searchParams.edit?.trim() || "";
 
-  const [planning, skus, inventory] = await Promise.all([
-    fetchWNPPlanning(),
-    fetchSkus(),
-    fetchCurrentInventory(),
-  ]);
-
-  const skuDesc = new Map(skus.map(s => [s.skuCode, s.description]));
-  const partDesc = new Map<string, string>();
-  for (const r of inventory) if (!partDesc.has(r.partNumber)) partDesc.set(r.partNumber, r.description);
-
-  // newest first, only rows with a work order
-  const options: WorkOrderOption[] = planning
-    .filter(r => r.workOrderNo && r.workOrderNo.trim() !== "")
-    .reverse()
-    .map(r => ({
-      workOrder: r.workOrderNo,
-      sku: r.productCode,
-      description: r.description || skuDesc.get(r.productCode) || "",
-      productBatch: r.batch || "",
-      productBBD: r.bbd || "",
-      bulkCode: r.bulkCode || "",
-      bulkDescription: r.bulkCode ? (partDesc.get(r.bulkCode) || "") : "",
-    }));
-
-  // de-dup by work order (keep first / newest)
-  const seen = new Set<string>();
-  const unique = options.filter(o => (seen.has(o.workOrder) ? false : (seen.add(o.workOrder), true)));
+  const unique = await buildWorkOrderOptions();
 
   // Edit mode: load the report and build a pre-fill payload from the yield engine.
   let editReport: EditReport | undefined;
