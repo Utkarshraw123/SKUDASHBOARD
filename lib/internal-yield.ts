@@ -348,3 +348,10 @@ export function computeInternalYield(rows: (string | number)[][]): InternalYield
 
   return { reports, byWorkOrder, byWeek, byMonth, byAncillary, batches, summary };
 }
+
+// Reports filed on a given calendar day (YYYY-MM-DD), newest first. Used by the
+// /floor app's "Today" activity summary so a supervisor can confirm their
+// submissions landed. Pure + testable.
+export function reportsOnDate(reports: YieldReport[], dateISO: string): YieldReport[] {
+  return reports.filter((r) => r.dateISO === dateISO);
+}

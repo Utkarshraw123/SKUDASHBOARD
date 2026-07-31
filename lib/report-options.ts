@@ -1,5 +1,57 @@
-import { fetchWNPPlanning, fetchSkus, fetchCurrentInventory } from "@/lib/sheets";
-import type { WorkOrderOption } from "@/components/ProductionReportForm";
+import { fetchWNPPlanning, fetchSkus, fetchCurrentInventory, fetchProductionReportRows } from "@/lib/sheets";
+import { computeInternalYield } from "@/lib/internal-yield";
+import type { WorkOrderOption, EditReport } from "@/components/ProductionReportForm";
+
+const numStr = (n: number) => (n ? String(n) : "");
+
+// Load an existing production report and build the edit-prefill payload (all
+// numerics as strings to match the form inputs). Shared by the dashboard edit
+// page and the /floor app edit flow. Returns undefined if the id is unknown.
+export async function buildEditReport(editId: string): Promise<EditReport | undefined> {
+  const id = editId.trim();
+  if (!id) return undefined;
+  const rows = await fetchProductionReportRows();
+  const report = computeInternalYield(rows).reports.find((r) => r.reportId === id);
+  if (!report) return undefined;
+
+  const nBatch = Math.max(report.productBatches.length, report.productBBDs.length, 1);
+  const batches = Array.from({ length: nBatch }, (_, i) => ({
+    batch: report.productBatches[i] ?? "",
+    bbd: report.productBBDs[i] ?? "",
+  }));
+  const bulks = report.bulks.map((b) => ({
+    bulkCode: b.bulkCode,
+    bulkDescription: b.bulkDescription,
+    bulkBatch: b.bulkBatch,
+    bulkBBD: b.bulkBBD,
+    used: numStr(b.used),
+    wasteCapsules: numStr(b.wasteCapsules),
+  }));
+
+  return {
+    reportId: report.reportId,
+    timestamp: report.timestamp,
+    workOrder: report.workOrder,
+    sku: report.sku,
+    description: report.description,
+    productType: report.productType,
+    batches,
+    bulks: bulks.length ? bulks : [{ bulkCode: "", bulkDescription: "", bulkBatch: "", bulkBBD: "", used: "", wasteCapsules: "" }],
+    made: numStr(report.made),
+    people: numStr(report.people),
+    woStatus: report.woStatus || "complete",
+    anc: {
+      jars: numStr(report.ancWaste.jars),
+      lids: numStr(report.ancWaste.lids),
+      labels: numStr(report.ancWaste.labels),
+      box: numStr(report.ancWaste.box),
+      pouches: numStr(report.ancWaste.pouches),
+      desiccants: numStr(report.ancWaste.desiccants),
+    },
+    disposalNumber: report.disposalNumber,
+    comments: report.comments,
+  };
+}
 
 // Build the work-order picker options for the production report form.
 // Shared by the dashboard page (app/planning/report) and the /floor app page
