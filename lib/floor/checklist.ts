@@ -30,7 +30,9 @@ export function phaseComplete(items: ChecklistItem[], checks: ReadinessCheck[], 
   return checklistProgress(items, checks, phase).complete;
 }
 
-// Runs may be logged once the Start phase is signed off (a completer + a cross-check).
+// Runs may be logged once the Start phase is signed off by a supervisor.
+// (No second approval / cross-check is required — one supervisor completing the
+// Start-of-Day checklist is sufficient. Changed 2026-07-31 per user request.)
 export function canLogRuns(day: ReadinessDay): boolean {
-  return day.startCompletedBy != null && day.startCrossCheckBy != null;
+  return day.startCompletedBy != null;
 }

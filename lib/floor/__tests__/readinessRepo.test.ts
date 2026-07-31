@@ -42,11 +42,11 @@ describe("readinessRepo", () => {
     for (const it of view.items) {
       await saveCheck("2026-07-30", { itemId: it.id, phase: "start", result: "confirm", comment: null }, 2);
     }
-    await expect(completePhase("2026-07-30", "start", 2, 2)).rejects.toThrow(/different user/i);
-    await completePhase("2026-07-30", "start", 2, 3);
+    // One supervisor completing the phase is sufficient — no cross-check / second approval.
+    await completePhase("2026-07-30", "start", 2);
     const day = await getOrCreateDay("2026-07-30");
     expect(day.startCompletedBy).toBe(2);
-    expect(day.startCrossCheckBy).toBe(3);
+    expect(day.startCrossCheckBy).toBeNull();
     expect(day.status).toBe("started");
   });
 
@@ -54,6 +54,6 @@ describe("readinessRepo", () => {
     const db = await freshTestDb();
     await seed(db, { adminPassword: "x" });
     await twoUsers();
-    await expect(completePhase("2026-07-30", "start", 2, 3)).rejects.toThrow(/all items/i);
+    await expect(completePhase("2026-07-30", "start", 2)).rejects.toThrow(/all items/i);
   });
 });

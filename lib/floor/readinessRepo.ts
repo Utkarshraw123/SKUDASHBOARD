@@ -125,23 +125,23 @@ export async function completePhase(
   date: string,
   phase: Phase,
   completerId: number,
-  crossCheckId: number,
 ): Promise<void> {
-  if (completerId === crossCheckId) throw new Error("Cross-check must be a different user than the completer.");
   const view = await getDayChecks(date);
   if (!phaseComplete(view.items, view.checks, phase)) {
     throw new Error("All items must be answered before completing this phase.");
   }
   const now = new Date().toISOString();
+  // No cross-check / second approval — one supervisor completing the phase is
+  // sufficient (changed 2026-07-31 per user request). Cross-check columns left NULL.
   if (phase === "start") {
     await getClient().execute({
-      sql: "UPDATE readiness_days SET start_completed_by=?, start_completed_at=?, start_cross_check_by=?, status='started' WHERE date=?",
-      args: [completerId, now, crossCheckId, date],
+      sql: "UPDATE readiness_days SET start_completed_by=?, start_completed_at=?, start_cross_check_by=NULL, status='started' WHERE date=?",
+      args: [completerId, now, date],
     });
   } else {
     await getClient().execute({
-      sql: "UPDATE readiness_days SET end_completed_by=?, end_completed_at=?, end_cross_check_by=?, status='closed' WHERE date=?",
-      args: [completerId, now, crossCheckId, date],
+      sql: "UPDATE readiness_days SET end_completed_by=?, end_completed_at=?, end_cross_check_by=NULL, status='closed' WHERE date=?",
+      args: [completerId, now, date],
     });
   }
 }

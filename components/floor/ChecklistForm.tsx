@@ -5,15 +5,12 @@ import { useRouter } from "next/navigation";
 
 interface Item { id: number; sortOrder: number; category: string; label: string; critical: boolean; }
 interface Check { itemId: number; phase: string; result: "confirm" | "deny"; comment: string | null; }
-interface Sup { id: number; name: string; }
 
 export default function ChecklistForm({ phase }: { phase: "start" | "end" }) {
   const router = useRouter();
   const date = new Date().toISOString().slice(0, 10);
   const [items, setItems] = useState<Item[]>([]);
   const [checks, setChecks] = useState<Record<number, { result: "confirm" | "deny"; comment: string }>>({});
-  const [supervisors, setSupervisors] = useState<Sup[]>([]);
-  const [crossCheckId, setCrossCheckId] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
@@ -27,8 +24,6 @@ export default function ChecklistForm({ phase }: { phase: "start" | "end" }) {
       }
       setChecks(existing);
       setDone(phase === "start" ? !!r.day.startCompletedBy : !!r.day.endCompletedBy);
-      const cat = await fetch("/api/floor/catalog").then((x) => x.json());
-      setSupervisors(cat.supervisors);
     })();
   }, [date, phase]);
 
@@ -62,7 +57,7 @@ export default function ChecklistForm({ phase }: { phase: "start" | "end" }) {
     }
     const res = await fetch("/api/floor/readiness/complete", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, phase, crossCheckId }),
+      body: JSON.stringify({ date, phase }),
     });
     if (res.ok) { router.push("/floor"); router.refresh(); }
     else setError((await res.json()).error ?? "Could not complete.");
@@ -96,16 +91,7 @@ export default function ChecklistForm({ phase }: { phase: "start" | "end" }) {
         );
       })}
 
-      <div className="rounded-xl bg-white border border-[#e4ddd4] p-4 space-y-2">
-        <label className="text-sm text-charcoal">Cross-check by (a different supervisor)</label>
-        <select value={crossCheckId} onChange={(e) => setCrossCheckId(e.target.value)}
-          className="w-full rounded-lg border border-[#e4ddd4] px-3 py-2 text-base">
-          <option value="">Select…</option>
-          {supervisors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </div>
-
-      <button onClick={complete} disabled={answered !== items.length || !crossCheckId || done}
+      <button onClick={complete} disabled={answered !== items.length || done}
         className="w-full rounded-xl bg-copper text-white py-3 font-medium disabled:opacity-50">
         {done ? "Completed ✓" : `Complete ${phase}-of-Day`}
       </button>

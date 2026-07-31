@@ -48,6 +48,7 @@ describe("phaseComplete / canLogRuns", () => {
       startCrossCheckBy: null, endCompletedBy: null, endCompletedAt: null, endCrossCheckBy: null, status: "open",
     };
     expect(canLogRuns(open)).toBe(false);
-    expect(canLogRuns({ ...open, startCompletedBy: 1, startCrossCheckBy: 2, status: "started" })).toBe(true);
+    // No cross-check required — a completed start phase alone unlocks run logging.
+    expect(canLogRuns({ ...open, startCompletedBy: 1, startCrossCheckBy: null, status: "started" })).toBe(true);
   });
 });
