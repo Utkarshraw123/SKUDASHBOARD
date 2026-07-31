@@ -35,6 +35,7 @@ export default async function VariancePage({
 
   function VarianceTable({ rows, positive }: { rows: typeof withVariance; positive: boolean }) {
     return (
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-cream border-b border-[#e4ddd4]">
           <tr className="text-left">
@@ -71,6 +72,7 @@ export default async function VariancePage({
           ))}
         </tbody>
       </table>
+      </div>
     );
   }
 

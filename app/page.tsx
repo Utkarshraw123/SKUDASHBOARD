@@ -160,6 +160,7 @@ export default async function OverviewPage() {
             View all →
           </Link>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left border-b border-[#e4ddd4]">
@@ -188,6 +189,7 @@ export default async function OverviewPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

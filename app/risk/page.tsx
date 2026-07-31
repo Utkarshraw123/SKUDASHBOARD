@@ -77,6 +77,7 @@ export default async function RiskPage({
         {atRisk.length === 0 ? (
           <p className="px-5 py-10 text-center text-text-muted text-sm">No results match your filters.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-cream border-b border-[#e4ddd4]">
               <tr className="text-left">
@@ -121,6 +122,7 @@ export default async function RiskPage({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
