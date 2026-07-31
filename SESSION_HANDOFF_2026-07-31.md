@@ -32,6 +32,19 @@
 > still green (two updated), tsc+build clean, verified end-to-end locally + deployed. **This voids
 > the old "need a 2nd supervisor for cross-check" note — a 2nd supervisor is now OPTIONAL.** Any
 > §1/§5/§6/§9 text below describing a mandatory cross-check is superseded by this note.
+>
+> **UPDATE 2026-07-31 (HEAD `83ef2ef`): Production Report now fillable from the /floor app.** The
+> detailed production/wastage report (previously dashboard-only at `/planning/report`) is now also
+> at **`/floor/report`**, reusing the SAME `ProductionReportForm` in `sessionAuth` mode (no shared
+> password — the supervisor login authorizes the write). It writes to the SAME Google Sheet, so it
+> reflects on the dashboard **Yield** + **Reports** tabs unchanged. `/api/production-report` now
+> accepts a valid supervisor session OR the `12345` password (pure `reportAuthorized()`, tested);
+> the dashboard form is untouched. Work-order options extracted to `lib/report-options.ts` (shared
+> by both pages). The **/floor home was redesigned** into a labelled menu: **Startup checks · Log
+> inputs · Report production · End-of-day checks** (+ Admin for admins). 67 tests green, verified
+> live. NOTE: the app report write path is the same known-working sheet code — it was verified via
+> auth paths + the live work-order picker, NOT by submitting a test report (golden rule: never
+> write to the 5 real reports).
 
 ---
 
