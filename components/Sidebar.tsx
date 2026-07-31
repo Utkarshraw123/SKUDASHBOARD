@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import MarketModal, { type MarketMode } from "./MarketModal";
@@ -62,10 +63,15 @@ export default function Sidebar({ mode }: { mode: MarketMode }) {
     <>
       <aside className="w-64 shrink-0 min-h-screen flex flex-col border-r border-[#e4ddd4] bg-[#f7f3ee]">
         <div className="px-6 py-8 border-b border-[#e4ddd4]">
-          <p className="font-serif text-[#393836] font-medium text-xl tracking-wide leading-tight">
-            Wild Nutrition
-          </p>
-          <p className="text-[#8a8480] text-xs mt-1 tracking-widest uppercase">
+          <Image
+            src="/brand/wn-logo.png"
+            alt="Wild Nutrition"
+            width={460}
+            height={133}
+            priority
+            className="h-auto w-[172px]"
+          />
+          <p className="text-[#8a8480] text-xs mt-2 tracking-widest uppercase">
             SKU Dashboard
           </p>
         </div>

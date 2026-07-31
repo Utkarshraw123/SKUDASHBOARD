@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function FloorLoginPage() {
   const router = useRouter();
@@ -31,7 +32,15 @@ export default function FloorLoginPage() {
   return (
     <div className="min-h-full flex items-center justify-center px-4 py-10">
       <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-2xl border border-[#e4ddd4] p-6 space-y-4">
-        <h1 className="font-serif text-2xl text-charcoal">Production Login</h1>
+        <Image
+          src="/brand/wn-logo.png"
+          alt="Wild Nutrition"
+          width={460}
+          height={133}
+          priority
+          className="mx-auto h-auto w-[190px]"
+        />
+        <h1 className="font-serif text-2xl text-charcoal text-center">Production Login</h1>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <input
           className="w-full rounded-xl border border-[#e4ddd4] px-3 py-3 text-base"

@@ -6,6 +6,7 @@ import { fetchProductionReportRows } from "@/lib/sheets";
 import { computeInternalYield, reportsOnDate } from "@/lib/internal-yield";
 import LogoutButton from "@/components/floor/LogoutButton";
 import Link from "next/link";
+import Image from "next/image";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,14 @@ export default async function FloorHome() {
     <div className="min-h-full p-6 max-w-md mx-auto space-y-4">
       <header className="flex items-center justify-between">
         <div>
+          <Image
+            src="/brand/wn-logo.png"
+            alt="Wild Nutrition"
+            width={460}
+            height={133}
+            priority
+            className="h-auto w-[150px] mb-2"
+          />
           <h1 className="font-serif text-2xl text-charcoal">Welcome, {user.name.split(" ")[0]}</h1>
           <p className="text-text-muted text-sm">{date}</p>
         </div>
