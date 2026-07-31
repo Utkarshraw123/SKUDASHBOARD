@@ -253,10 +253,10 @@ items" after adding one).
 template **in place** (additive + soft-remove), which is safe for this internal tool. This is the
 natural **Phase 5** if the user wants it.
 
-**★ SU04 item-count open question (carried since design):** the seed has **15** items — the SU04
-document's **14** plus a 15th, "Personnel are fit for work". If the user wants exactly the
-document's 14: delete that line from `SU04_ITEMS` in `lib/db/seed.ts` and change the seed test's
-`toBe(15)` → `toBe(14)` in `lib/db/__tests__/seed.test.ts`. **Confirm with the user.**
+**★ SU04 item-count — RESOLVED 2026-07-31:** the user **confirmed keeping 15 items** (the SU04
+document's 14 plus "Personnel are fit for work"). No change — the seed and the `toBe(15)` test are
+correct as-is. Comment added at `SU04_ITEMS` in `lib/db/seed.ts` recording the decision. Do NOT
+re-ask or drop the 15th item.
 
 ---
 
@@ -371,7 +371,7 @@ Existing: `SHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `PRODUCTION_REPORTS_SHEET_I
 
 1. **★ Provision the production Turso DB (§9)** — the single blocker to real-world use. Needs the
    user's Turso account. Then redeploy + change the admin password.
-2. **Confirm SU04 item count** — 15 seeded vs 14 in the document (§7). One-line change either way.
+2. ~~**Confirm SU04 item count**~~ — ✅ RESOLVED 2026-07-31: user confirmed keeping 15 (§7). No action.
 3. **Onboard real users** via `/floor/admin` — create the actual supervisors; deactivate the
    seeded sample operators/machines that don't match reality and add the real ones.
 4. **Replace the placeholder PWA icons** (`public/icons/icon-{192,512}.png`) with branded art.

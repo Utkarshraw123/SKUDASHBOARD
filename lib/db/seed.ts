@@ -3,6 +3,9 @@ import { getClient } from "./client";
 import { applySchema } from "./migrate";
 import { hashPassword } from "@/lib/auth/password";
 
+// 15 items = the 14 on the paper SU04 V1 doc + "Personnel are fit for work".
+// The extra 15th item was CONFIRMED intentional by the user on 2026-07-31 — keep it.
+// Do NOT drop it to match the document's 14; the seed test asserts toBe(15) on purpose.
 const SU04_ITEMS: { category: string; label: string; critical: boolean }[] = [
   { category: "Environment", label: "Area is clear from debris", critical: false },
   { category: "Environment", label: "Ventilation units are working", critical: false },
