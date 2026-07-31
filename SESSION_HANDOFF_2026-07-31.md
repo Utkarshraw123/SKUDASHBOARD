@@ -67,6 +67,14 @@
 > NOTE: "today" is UTC-based (matches the rest of the app; Vercel runs in UTC). The app report list
 > is NOT filtered by author — reports carry no author column, so it shows ALL of today's reports
 > (fine for a small shift; add a "Logged By" column later if per-person scoping is ever needed).
+>
+> **UPDATE 2026-07-31 (HEAD `fe0dd8d`): real Wild Nutrition branding.** Supplied logo → transparent
+> `public/brand/wn-logo.png` (PIL: white→alpha, ink `#231f20`, trimmed) now brands the dashboard
+> sidebar, `/floor` login, and `/floor` home. The "W" monogram was auto-cropped into real
+> **PWA/favicon icons** — `app/icon.png` (favicon), `app/apple-icon.png` (iOS home screen), and the
+> manifest `public/icons/icon-{192,512}.png` — **replacing the placeholder copper squares** (so the
+> "replace placeholder icons" TODO below is DONE). Source art: `~/Downloads/WhatsApp Image 2026-07-31
+> at 16.33.30.jpeg`. To regenerate/rebrand, re-run the PIL steps in that commit against a new source.
 
 ---
 
@@ -425,7 +433,8 @@ Existing: `SHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `PRODUCTION_REPORTS_SHEET_I
 2. ~~**Confirm SU04 item count**~~ — ✅ RESOLVED 2026-07-31: user confirmed keeping 15 (§7). No action.
 3. **Onboard real users** via `/floor/admin` — create the actual supervisors; deactivate the
    seeded sample operators/machines that don't match reality and add the real ones.
-4. **Replace the placeholder PWA icons** (`public/icons/icon-{192,512}.png`) with branded art.
+4. ~~**Replace the placeholder PWA icons**~~ — ✅ DONE 2026-07-31: real Wild Nutrition "W" monogram
+   icons + favicon + apple-icon + transparent logo across dashboard/app (see top banner, HEAD `fe0dd8d`).
 5. **Optional Phase 5 — SU04 template versioning** (clone-to-new-version); per-area templates.
 6. **Optional cleanups:** retire the legacy sheet-based **Performance** tab once the DB Appraisals
    view is trusted; one-time import of historical `INPUT` rows into `runs`; derive `planned_qty`
