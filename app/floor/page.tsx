@@ -18,8 +18,8 @@ export default async function FloorHome() {
     <div className="min-h-full p-6 max-w-md mx-auto space-y-4">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-2xl text-charcoal">Production</h1>
-          <p className="text-text-muted text-sm">{date} · {user.name}</p>
+          <h1 className="font-serif text-2xl text-charcoal">Welcome, {user.name.split(" ")[0]}</h1>
+          <p className="text-text-muted text-sm">{date}</p>
         </div>
         <LogoutButton />
       </header>

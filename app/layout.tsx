@@ -3,6 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import MarketModal from "@/components/MarketModal";
 import ChatBot from "@/components/ChatBot";
+import ChromeGate from "@/components/ChromeGate";
 import { getMarketMode } from "@/lib/markets";
 import { cookies } from "next/headers";
 
@@ -18,10 +19,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="flex min-h-screen antialiased bg-cream">
-        <Sidebar mode={mode} />
+        <ChromeGate><Sidebar mode={mode} /></ChromeGate>
         <main className="flex-1 overflow-auto p-10">{children}</main>
-        {!configured && <MarketModal show={true} currentMode={mode} />}
-        <ChatBot />
+        <ChromeGate>
+          {!configured && <MarketModal show={true} currentMode={mode} />}
+          <ChatBot />
+        </ChromeGate>
       </body>
     </html>
   );

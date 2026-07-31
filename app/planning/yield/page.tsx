@@ -2,8 +2,11 @@ import { fetchProductionReportRows } from "@/lib/sheets";
 import { computeInternalYield } from "@/lib/internal-yield";
 import InternalYieldView from "@/components/InternalYieldView";
 
-// Near-real-time: reports appear here shortly after the form is submitted.
-export const revalidate = 60;
+// Always render fresh (like the sibling Appraisals/Runs/SU04 tabs) so a report
+// submitted from the app or dashboard is visible on the very next load. The
+// underlying sheet reads are still cached ~120s (tag "sheets", invalidated on
+// every write), so this does not increase Google Sheets read pressure.
+export const dynamic = "force-dynamic";
 
 export default async function InternalYieldPage() {
   const rows = await fetchProductionReportRows();
