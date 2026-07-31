@@ -21,8 +21,9 @@
 > **skudashboard** Vercel Production env (`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`). Verified
 > live: `/api/floor/login` → `{"ok":true,"role":"admin"}`, `/api/floor/catalog` returns seeded
 > data, and `/planning/{appraisals,runs,compliance}` all 200 with no Turso error. **The app is now
-> fully usable.** Temp admin password was `WildDash-Floor-2026!` — MUST be changed on first login,
-> and a 2nd supervisor must be added for SU04 cross-check (see §9).
+> fully usable.** The admin password has since been **changed by the user** (the temp
+> `WildDash-Floor-2026!` is dead) — new value not recorded here. **Still TODO:** add a 2nd
+> supervisor for SU04 cross-check (see §9).
 
 ---
 
@@ -376,9 +377,8 @@ Existing: `SHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `PRODUCTION_REPORTS_SHEET_I
 ## 13. Left open / next steps (priority order)
 
 1. ~~**★ Provision the production Turso DB (§9)**~~ — ✅ DONE 2026-07-31 (see top banner). DB
-   created + seeded + env set + deployed + verified live. **Still to do by the user:** change the
-   temp admin password (`WildDash-Floor-2026!`) on first login, and add a 2nd supervisor for SU04
-   cross-check.
+   created + seeded + env set + deployed + verified live. Admin password **already changed** by the
+   user (temp is dead). **Still to do by the user:** add a 2nd supervisor for SU04 cross-check.
 2. ~~**Confirm SU04 item count**~~ — ✅ RESOLVED 2026-07-31: user confirmed keeping 15 (§7). No action.
 3. **Onboard real users** via `/floor/admin` — create the actual supervisors; deactivate the
    seeded sample operators/machines that don't match reality and add the real ones.
