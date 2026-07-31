@@ -55,6 +55,18 @@
 > chatbot leaked into `/floor`; new `components/ChromeGate.tsx` (client, `usePathname`) hides them
 > on `/floor` routes only (dashboard unchanged, regression-checked). The `/floor` home now greets
 > the supervisor by first name ("Welcome, <name>").
+>
+> **UPDATE 2026-07-31 (HEAD `2d7e542`): today's-activity summary + edit reports from the app.**
+> (1) The `/floor` home has a **"Today's activity"** card — count of today's reports + runs, and a
+> tappable list of today's reports so a supervisor can confirm their submission landed without the
+> dashboard. (2) Each report links to **`/floor/report?edit=<id>`**, which opens the SAME
+> `ProductionReportForm` pre-filled in edit mode (sessionAuth) — supervisors correct their own
+> mis-typed report from the phone (uses the existing `updateProductionReport` overwrite-in-place).
+> Edit-prefill builder extracted to `buildEditReport()` in `lib/report-options.ts` (shared by the
+> dashboard + app edit pages); pure `reportsOnDate()` added to `lib/internal-yield.ts`. 69 tests.
+> NOTE: "today" is UTC-based (matches the rest of the app; Vercel runs in UTC). The app report list
+> is NOT filtered by author — reports carry no author column, so it shows ALL of today's reports
+> (fine for a small shift; add a "Logged By" column later if per-person scoping is ever needed).
 
 ---
 
