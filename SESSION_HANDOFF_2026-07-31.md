@@ -22,8 +22,16 @@
 > live: `/api/floor/login` → `{"ok":true,"role":"admin"}`, `/api/floor/catalog` returns seeded
 > data, and `/planning/{appraisals,runs,compliance}` all 200 with no Turso error. **The app is now
 > fully usable.** The admin password has since been **changed by the user** (the temp
-> `WildDash-Floor-2026!` is dead) — new value not recorded here. **Still TODO:** add a 2nd
-> supervisor for SU04 cross-check (see §9).
+> `WildDash-Floor-2026!` is dead) — new value not recorded here.
+>
+> **UPDATE 2026-07-31 (HEAD `ee4b610`): SU04 cross-check / second-approval REMOVED per user.** Once
+> ONE supervisor answers all items and completes a phase, it's done — no different-user cross-check.
+> Changed: `completePhase()` drops the `crossCheckId` arg + "different user" rule (cross-check DB
+> columns now left NULL); `canLogRuns()` unlocks on `startCompletedBy` alone; the complete API no
+> longer requires `crossCheckId`; `ChecklistForm` dropped the "Cross-check by" dropdown. 64 tests
+> still green (two updated), tsc+build clean, verified end-to-end locally + deployed. **This voids
+> the old "need a 2nd supervisor for cross-check" note — a 2nd supervisor is now OPTIONAL.** Any
+> §1/§5/§6/§9 text below describing a mandatory cross-check is superseded by this note.
 
 ---
 
